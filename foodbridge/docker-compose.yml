@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  foodbridge-db:
+    image: postgis/postgis:15-3.3
+    container_name: foodbridge-postgres
+    environment:
+      POSTGRES_USER: foodbridge_admin
+      POSTGRES_PASSWORD: securepassword123
+      POSTGRES_DB: foodbridge_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

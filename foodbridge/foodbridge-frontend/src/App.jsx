@@ -1,0 +1,72 @@
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import axios from 'axios';
+import Register from './pages/Register';
+import Login from './pages/Login';
+import DonorDashboard from "./pages/DonorDashboard.jsx";
+import LogSurplus from "./pages/LogSurplus.jsx";
+import NgoDashboard from "./pages/NgoDashboard.jsx";
+
+// ---> NEW COMPONENT: The Global Interceptor <---
+const AxiosInterceptor = ({ children }) => {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        // Set up the watcher
+        const interceptor = axios.interceptors.response.use(
+            (response) => response, // If the request is successful, just pass it through
+            (error) => {
+                // If the server throws a 401 (Unauthorized) or 403 (Forbidden)
+                if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                    console.warn("Session expired or unauthorized. Redirecting to login...");
+                    alert("Your session has expired. Please log in again.");
+                    localStorage.clear(); // Wipe the dead token
+                    navigate('/login');   // Kick them to the login page
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        // Clean up the watcher when the app closes
+        return () => axios.interceptors.response.eject(interceptor);
+    }, [navigate]);
+
+    return children;
+};
+
+// --- NEW COMPONENT: The Traffic Cop ---
+// This acts as a wrapper around the Home route to decide which dashboard to show
+const HomeRouter = () => {
+    const role = localStorage.getItem('user_role');
+
+    if (role === 'NGO') {
+        return <NgoDashboard />;
+    } else if (role === 'DONOR') {
+        return <DonorDashboard />;
+    } else {
+        // If they have no role (not logged in), send them to login
+        return <Navigate to="/login" />;
+    }
+};
+
+function App() {
+  return (
+      <Router>
+          <AxiosInterceptor>
+            <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
+              {/* We will replace these with real components on Day 6 */}
+              <Routes>
+                <Route path="/" element={<HomeRouter />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/log-surplus" element={<LogSurplus />} />
+                {/*A catch-all route that sends unknown URLs back to the home page */}
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </div>
+        </AxiosInterceptor>
+      </Router>
+  );
+}
+
+export default App;
