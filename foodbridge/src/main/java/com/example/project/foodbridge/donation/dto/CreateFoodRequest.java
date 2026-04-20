@@ -1,12 +1,11 @@
 package com.example.project.foodbridge.donation.dto;
 
-import com.example.project.foodbridge.donation.model.FoodStatus;
-
 public class CreateFoodRequest {
     private String description;
     private String quantity;
     private Double latitude;
     private Double longitude;
+    private Integer expiresInMinutes;
 
     public String getDescription() {
         return description;
@@ -38,6 +37,14 @@ public class CreateFoodRequest {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public Integer getExpiresInMinutes() {
+        return expiresInMinutes;
+    }
+
+    public void setExpiresInMinutes(Integer expiresInMinutes) {
+        this.expiresInMinutes = expiresInMinutes;
     }
 
 }

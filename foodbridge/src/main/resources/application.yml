@@ -22,6 +22,11 @@ spring:
 app:
   matching:
     default-radius-km: 5
+  donation:
+    default-expiry-minutes: 120
+    default-expected-pickup-minutes: 60
+    max-expiry-minutes: 720
+    max-expected-pickup-minutes: 480
   cors:
     allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*
   demo:

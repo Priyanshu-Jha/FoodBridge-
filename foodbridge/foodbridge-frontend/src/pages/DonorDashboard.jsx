@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { connectDonorTracker } from '../services/donorTrackerSocket';
 
 const DonorDashboard = () => {
     const [donations, setDonations] = useState([]);
@@ -12,6 +13,8 @@ const DonorDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [actionMessage, setActionMessage] = useState('');
+    const [trackerToast, setTrackerToast] = useState('');
+    const [donorId, setDonorId] = useState(null);
     const navigate = useNavigate();
     const REFRESH_INTERVAL_MS = 5000;
 
@@ -51,6 +54,23 @@ const DonorDashboard = () => {
     useEffect(() => {
         fetchMyDonations();
 
+        const fetchMe = async () => {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                return;
+            }
+            try {
+                const me = await axios.get('http://localhost:8080/api/users/me', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setDonorId(me.data.id);
+            } catch (e) {
+                // Ignore; dashboard still works via polling.
+            }
+        };
+
+        fetchMe();
+
         const refreshId = window.setInterval(() => {
             fetchMyDonations(true);
         }, REFRESH_INTERVAL_MS);
@@ -74,6 +94,89 @@ const DonorDashboard = () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [fetchMyDonations]);
+
+    useEffect(() => {
+        if (!donorId) {
+            return;
+        }
+
+        const disconnect = connectDonorTracker({
+            donorId,
+            onUpdate: (update) => {
+                if (!update?.donationId) {
+                    return;
+                }
+
+                setDonations((prev) => prev.map((item) => {
+                    if (item.id !== update.donationId) {
+                        return item;
+                    }
+                    return {
+                        ...item,
+                        pickupStage: update.stage || item.pickupStage,
+                    };
+                }));
+
+                const ngoName = update.ngoName || 'NGO';
+                const stage = update.stage || 'UPDATE';
+                let message = `${ngoName}: ${stage}`;
+                if (stage === 'CLAIMED') {
+                    message = `${ngoName} claimed your donation.`;
+                } else if (stage === 'COMING') {
+                    message = `${ngoName} is coming for pickup.`;
+                } else if (stage === 'ARRIVED') {
+                    message = `${ngoName} arrived at your location.`;
+                } else if (stage === 'COMPLETED') {
+                    message = `${ngoName} completed pickup.`;
+                }
+                setTrackerToast(message);
+                window.setTimeout(() => setTrackerToast(''), 4000);
+
+                // Also refresh from backend to pick up timestamps/status updates.
+                fetchMyDonations(true);
+            },
+        });
+
+        return () => disconnect();
+    }, [donorId, fetchMyDonations]);
+
+    const renderTracker = (food) => {
+        if (food.status !== 'CLAIMED' && food.status !== 'COMPLETED') {
+            return null;
+        }
+
+        const stage = food.pickupStage || (food.status === 'COMPLETED' ? 'COMPLETED' : 'CLAIMED');
+        const steps = [
+            { key: 'CLAIMED', label: 'Claimed' },
+            { key: 'COMING', label: 'Coming' },
+            { key: 'ARRIVED', label: 'Arrived' },
+            { key: 'COMPLETED', label: 'Picked up' },
+        ];
+        const idx = steps.findIndex((s) => s.key === stage);
+
+        return (
+            <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold text-slate-700 mb-2">
+                    Tracker{food.claimedByName ? ` • NGO: ${food.claimedByName}` : ''}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {steps.map((s, i) => {
+                        const active = idx >= i && idx !== -1;
+                        return (
+                            <span
+                                key={s.key}
+                                className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                    active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                                }`}
+                            >
+                                {s.label}
+                            </span>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     const handleDelete = async (foodId) => {
         if (!window.confirm("Are you sure you want to delete this listing?")) return;
@@ -131,6 +234,11 @@ const DonorDashboard = () => {
 
     return (
         <div className="w-full max-w-6xl mx-auto p-6">
+            {trackerToast && (
+                <div className="mb-4 w-full rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {trackerToast}
+                </div>
+            )}
             <div className="flex justify-between items-center mb-8 border-b pb-4">
                 <h1 className="text-3xl font-bold text-gray-800">My Donations</h1>
                 <div className="flex gap-4">
@@ -197,6 +305,11 @@ const DonorDashboard = () => {
                                         {food.status}
                                     </span>
                                 </p>
+                                {food.status === 'CLAIMED' && food.claimedByName && (
+                                    <p className="text-gray-600 mb-2">
+                                        <span className="font-semibold">Claimed by:</span> {food.claimedByName}
+                                    </p>
+                                )}
                                 <p className="text-gray-600 mb-2">
                                     <span className="font-semibold">Route:</span>
                                     <span className={`ml-2 px-3 py-1 rounded-full text-xs font-bold ${
@@ -207,6 +320,7 @@ const DonorDashboard = () => {
                                         {food.latitude != null && food.longitude != null ? 'READY' : 'MISSING COORDINATES'}
                                     </span>
                                 </p>
+                                {renderTracker(food)}
                             </div>
                             <div className="flex flex-col mt-4 gap-2">
                                 <p className="text-xs text-gray-400 text-right mb-2">ID: {food.id.substring(0, 8)}...</p>

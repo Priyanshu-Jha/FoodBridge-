@@ -18,6 +18,7 @@ const LogSurplus = () => {
             quantity: foodData ? foodData.quantity : '',
             latitude: foodData?.latitude ?? '',
             longitude: foodData?.longitude ?? '',
+            expiresInMinutes: 120,
         }
     });
 
@@ -70,6 +71,7 @@ const LogSurplus = () => {
             quantity: data.quantity,
             latitude,
             longitude,
+            expiresInMinutes: data.expiresInMinutes === '' ? null : Number(data.expiresInMinutes),
         };
 
         try {
@@ -150,6 +152,20 @@ const LogSurplus = () => {
                             className="w-full p-2 border rounded"
                             placeholder="e.g., 73.8567"
                         />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2">Expires In (minutes)</label>
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            {...register('expiresInMinutes')}
+                            className="w-full p-2 border rounded"
+                            placeholder="e.g., 120"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                            After this time, if no NGO claims it, the donation disappears from the public feed.
+                        </p>
                     </div>
                     <p className="text-xs text-gray-500">
                         If left blank, we will use your saved account location when available.

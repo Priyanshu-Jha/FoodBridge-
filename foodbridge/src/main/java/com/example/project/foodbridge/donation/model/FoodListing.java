@@ -50,6 +50,22 @@ public class FoodListing {
     private String handoffToken;
 
     // ---------------------------------
+    private LocalDateTime expiresAt;
+
+    private LocalDateTime claimedAt;
+
+    private LocalDateTime expectedPickupAt;
+
+    private LocalDateTime completedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PickupStage pickupStage = PickupStage.NONE;
+
+    private LocalDateTime comingAt;
+
+    private LocalDateTime arrivedAt;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -139,5 +155,69 @@ public class FoodListing {
 
     public void setLocation(Point location) {
         this.location = location;
+    }
+
+    public LocalDateTime getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(LocalDateTime claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public LocalDateTime getExpectedPickupAt() {
+        return expectedPickupAt;
+    }
+
+    public void setExpectedPickupAt(LocalDateTime expectedPickupAt) {
+        this.expectedPickupAt = expectedPickupAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public PickupStage getPickupStage() {
+        return pickupStage;
+    }
+
+    public void setPickupStage(PickupStage pickupStage) {
+        this.pickupStage = pickupStage;
+    }
+
+    public LocalDateTime getComingAt() {
+        return comingAt;
+    }
+
+    public void setComingAt(LocalDateTime comingAt) {
+        this.comingAt = comingAt;
+    }
+
+    public LocalDateTime getArrivedAt() {
+        return arrivedAt;
+    }
+
+    public void setArrivedAt(LocalDateTime arrivedAt) {
+        this.arrivedAt = arrivedAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }

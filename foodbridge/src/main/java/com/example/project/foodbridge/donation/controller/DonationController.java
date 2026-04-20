@@ -1,33 +1,40 @@
 package com.example.project.foodbridge.donation.controller;
 
 import com.example.project.foodbridge.donation.FoodListingRepository;
+import com.example.project.foodbridge.donation.dto.ClaimFoodRequest;
 import com.example.project.foodbridge.donation.dto.CreateFoodRequest;
 import com.example.project.foodbridge.donation.dto.FoodResponse;
 import com.example.project.foodbridge.donation.dto.HandoffQrResponse;
+import com.example.project.foodbridge.donation.dto.PickupStageUpdateRequest;
 import com.example.project.foodbridge.donation.dto.VerifyHandoffRequest;
 import com.example.project.foodbridge.donation.dto.VerifyHandoffResponse;
 import com.example.project.foodbridge.donation.event.DonationCreatedEvent;
 import com.example.project.foodbridge.donation.model.FoodListing;
 import com.example.project.foodbridge.donation.model.FoodStatus;
+import com.example.project.foodbridge.donation.model.PickupStage;
 import com.example.project.foodbridge.user.dto.NearbyNgoResponse;
 import com.example.project.foodbridge.user.model.Role;
 import com.example.project.foodbridge.user.model.User;
 import com.example.project.foodbridge.user.repository.NearbyNgoProjection;
 import com.example.project.foodbridge.user.repository.UserRepository;
+import com.example.project.foodbridge.websocket.dto.DonationTrackerUpdate;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -41,16 +48,32 @@ public class DonationController {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    private final int defaultExpiryMinutes;
+    private final int maxExpiryMinutes;
+    private final int defaultExpectedPickupMinutes;
+    private final int maxExpectedPickupMinutes;
 
     public DonationController(
             FoodListingRepository foodListingRepository,
             UserRepository userRepository,
             ApplicationEventPublisher eventPublisher,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            SimpMessagingTemplate messagingTemplate,
+            @Value("${app.donation.default-expiry-minutes:120}") int defaultExpiryMinutes,
+            @Value("${app.donation.max-expiry-minutes:720}") int maxExpiryMinutes,
+            @Value("${app.donation.default-expected-pickup-minutes:60}") int defaultExpectedPickupMinutes,
+            @Value("${app.donation.max-expected-pickup-minutes:480}") int maxExpectedPickupMinutes) {
         this.foodRepository = foodListingRepository;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.messagingTemplate = messagingTemplate;
+        this.defaultExpiryMinutes = defaultExpiryMinutes;
+        this.maxExpiryMinutes = maxExpiryMinutes;
+        this.defaultExpectedPickupMinutes = defaultExpectedPickupMinutes;
+        this.maxExpectedPickupMinutes = maxExpectedPickupMinutes;
     }
 
     @PostMapping
@@ -70,6 +93,13 @@ public class DonationController {
         food.setQuantity(request.getQuantity());
         food.setDonor(donor);
 
+        int expiresMinutes = normalizeMinutes(
+                request.getExpiresInMinutes(),
+                defaultExpiryMinutes,
+                1,
+                maxExpiryMinutes);
+        food.setExpiresAt(LocalDateTime.now().plus(expiresMinutes, ChronoUnit.MINUTES));
+
         if (hasPartialCoordinates(request)) {
             return ResponseEntity.badRequest().body("Please provide both latitude and longitude together.");
         }
@@ -86,9 +116,9 @@ public class DonationController {
         FoodListing savedFood;
         try {
             savedFood = foodRepository.saveAndFlush(food);
-        } catch (OptimisticLockingFailureException ex) {
-            return ResponseEntity.status(409)
-                    .body("This food was just claimed by another NGO. Please refresh and try a different listing.");
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            return ResponseEntity.status(409).body(
+                    "This food was just claimed by another NGO. Please refresh and try a different listing.");
         }
 
         // Day 18: trigger matching workflow for nearby NGOs
@@ -100,15 +130,15 @@ public class DonationController {
 
         // Map to DTO and return
         FoodResponse response = new FoodResponse(
-                savedFood.getId(),
-                savedFood.getDescription(),
-                savedFood.getQuantity(),
-                savedFood.getStatus().name(),
-                savedFood.getDonor().getOrganizationName(),
-                responseLat,
-                responseLon
-
-        );
+                savedFood.getId(), savedFood.getDescription(), savedFood.getQuantity(),
+                savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(),
+                savedFood.getClaimedBy() != null ? savedFood.getClaimedBy().getOrganizationName() : null,
+                responseLat, responseLon,
+                savedFood.getCreatedAt(), savedFood.getExpiresAt(), savedFood.getClaimedAt(), savedFood.getExpectedPickupAt(),
+                savedFood.getCompletedAt(),
+                savedFood.getPickupStage() != null ? savedFood.getPickupStage().name() : null,
+                savedFood.getComingAt(),
+                savedFood.getArrivedAt());
         return ResponseEntity.ok(response);
     }
 
@@ -122,9 +152,11 @@ public class DonationController {
         List<FoodListing> availableFood;
 
         if (lat != null && lon != null) {
-            availableFood = foodRepository.findAvailableFoodWithinRadius(lat, lon, radius);
+            availableFood = foodRepository.findAvailableFoodWithinRadius(lat, lon, radius).stream()
+                    .filter(food -> food.getExpiresAt() == null || food.getExpiresAt().isAfter(LocalDateTime.now()))
+                    .collect(Collectors.toList());
         } else {
-            availableFood = foodRepository.findByStatus(FoodStatus.AVAILABLE);
+            availableFood = foodRepository.findByStatusNotExpired(FoodStatus.AVAILABLE, LocalDateTime.now());
         }
 
         // Step B: Convert the List of Entities into a List of clean DTOs
@@ -137,8 +169,17 @@ public class DonationController {
                             food.getQuantity(),
                             food.getStatus().name(),
                             food.getDonor().getOrganizationName(),
+                            food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
                             food.getLocation() != null ? food.getLocation().getY() : null,
-                            food.getLocation() != null ? food.getLocation().getX() : null);
+                            food.getLocation() != null ? food.getLocation().getX() : null,
+                            food.getCreatedAt(),
+                            food.getExpiresAt(),
+                            food.getClaimedAt(),
+                            food.getExpectedPickupAt(),
+                            food.getCompletedAt(),
+                            food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                            food.getComingAt(),
+                            food.getArrivedAt());
                 })
                 .collect(Collectors.toList());
 
@@ -162,8 +203,17 @@ public class DonationController {
                         food.getQuantity(),
                         food.getStatus().name(),
                         food.getDonor().getOrganizationName(),
+                        food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
                         food.getLocation() != null ? food.getLocation().getY() : null,
-                        food.getLocation() != null ? food.getLocation().getX() : null))
+                        food.getLocation() != null ? food.getLocation().getX() : null,
+                        food.getCreatedAt(),
+                        food.getExpiresAt(),
+                        food.getClaimedAt(),
+                        food.getExpectedPickupAt(),
+                        food.getCompletedAt(),
+                        food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                        food.getComingAt(),
+                        food.getArrivedAt()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responseList);
@@ -189,8 +239,52 @@ public class DonationController {
                         food.getQuantity(),
                         food.getStatus().name(),
                         food.getDonor().getOrganizationName(),
+                        food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
                         food.getLocation() != null ? food.getLocation().getY() : null,
-                        food.getLocation() != null ? food.getLocation().getX() : null))
+                        food.getLocation() != null ? food.getLocation().getX() : null,
+                        food.getCreatedAt(),
+                        food.getExpiresAt(),
+                        food.getClaimedAt(),
+                        food.getExpectedPickupAt(),
+                        food.getCompletedAt(),
+                        food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                        food.getComingAt(),
+                        food.getArrivedAt()))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(responseList);
+    }
+
+    // NEW: NGO pickup history (CLAIMED + COMPLETED) for the logged-in NGO
+    @GetMapping("/claimed-history-by-me")
+    public ResponseEntity<?> getMyClaimedHistory() {
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+
+        if (currentUser.getRole() != Role.NGO) {
+            return ResponseEntity.status(403).body("Only NGOs can access pickup history.");
+        }
+
+        List<FoodListing> claimedHistory = foodRepository.findByClaimedBy_EmailOrderByClaimedAtDesc(currentUserEmail);
+        List<FoodResponse> responseList = claimedHistory.stream()
+                .map(food -> new FoodResponse(
+                        food.getId(),
+                        food.getDescription(),
+                        food.getQuantity(),
+                        food.getStatus().name(),
+                        food.getDonor().getOrganizationName(),
+                        food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
+                        food.getLocation() != null ? food.getLocation().getY() : null,
+                        food.getLocation() != null ? food.getLocation().getX() : null,
+                        food.getCreatedAt(),
+                        food.getExpiresAt(),
+                        food.getClaimedAt(),
+                        food.getExpectedPickupAt(),
+                        food.getCompletedAt(),
+                        food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                        food.getComingAt(),
+                        food.getArrivedAt()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responseList);
@@ -211,8 +305,17 @@ public class DonationController {
                 food.getQuantity(),
                 food.getStatus().name(),
                 food.getDonor().getOrganizationName(),
+                food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
                 responseLat,
-                responseLon);
+                responseLon,
+                food.getCreatedAt(),
+                food.getExpiresAt(),
+                food.getClaimedAt(),
+                food.getExpectedPickupAt(),
+                food.getCompletedAt(),
+                food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                food.getComingAt(),
+                food.getArrivedAt());
         return ResponseEntity.ok(response);
     }
 
@@ -262,7 +365,7 @@ public class DonationController {
 
     // 4. Endpoint for an NGO to claim available food
     @PutMapping("/{id}/claim")
-    public ResponseEntity<?> claimFood(@PathVariable UUID id) {
+    public ResponseEntity<?> claimFood(@PathVariable UUID id, @RequestBody(required = false) ClaimFoodRequest request) {
         // Step A: Find the logged-in NGO
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         User ngo = userRepository.findByEmail(currentUserEmail)
@@ -281,9 +384,25 @@ public class DonationController {
             return ResponseEntity.badRequest().body("This food has already been claimed or cancelled.");
         }
 
+        if (food.getExpiresAt() != null && !food.getExpiresAt().isAfter(LocalDateTime.now())) {
+            return ResponseEntity.badRequest().body("This donation has expired and can no longer be claimed.");
+        }
+
         // Step D: Update the food record
         food.setStatus(FoodStatus.CLAIMED);
         food.setClaimedBy(ngo); // Link the NGO to the food!
+        if (food.getClaimedAt() == null) {
+            food.setClaimedAt(LocalDateTime.now());
+        }
+        food.setPickupStage(PickupStage.CLAIMED);
+
+        int expectedMinutes = normalizeMinutes(
+                request != null ? request.getExpectedPickupMinutes() : null,
+                defaultExpectedPickupMinutes,
+                1,
+                maxExpectedPickupMinutes);
+        food.setExpectedPickupAt(LocalDateTime.now().plus(expectedMinutes, ChronoUnit.MINUTES));
+
         if (food.getHandoffPin() == null || food.getHandoffToken() == null) {
             food.setHandoffPin(generateHandoffPin());
             food.setHandoffToken(UUID.randomUUID().toString());
@@ -292,15 +411,97 @@ public class DonationController {
         // Step E: Save the changes
         FoodListing savedFood = foodRepository.save(food);
 
+        // Notify donor in realtime that NGO claimed
+        if (savedFood.getDonor() != null) {
+            DonationTrackerUpdate update = new DonationTrackerUpdate(
+                    "DONATION_TRACKER_UPDATE",
+                    savedFood.getId(),
+                    PickupStage.CLAIMED.name(),
+                    ngo.getId(),
+                    ngo.getOrganizationName(),
+                    savedFood.getDonor().getId(),
+                    savedFood.getDonor().getOrganizationName(),
+                    System.currentTimeMillis());
+            messagingTemplate.convertAndSend("/topic/donor/" + savedFood.getDonor().getId() + "/tracker", update);
+        }
+
         Double responseLat = savedFood.getLocation() != null ? savedFood.getLocation().getY() : null;
         Double responseLon = savedFood.getLocation() != null ? savedFood.getLocation().getX() : null;
 
         // Step F: Return success
         FoodResponse response = new FoodResponse(
                 savedFood.getId(), savedFood.getDescription(), savedFood.getQuantity(),
-                savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(), responseLat, responseLon);
+                savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(),
+                savedFood.getClaimedBy() != null ? savedFood.getClaimedBy().getOrganizationName() : null,
+                responseLat, responseLon,
+                savedFood.getCreatedAt(), savedFood.getExpiresAt(), savedFood.getClaimedAt(), savedFood.getExpectedPickupAt(),
+                savedFood.getCompletedAt(),
+                savedFood.getPickupStage() != null ? savedFood.getPickupStage().name() : null,
+                savedFood.getComingAt(),
+                savedFood.getArrivedAt());
 
         return ResponseEntity.ok(response);
+    }
+
+    // NEW: NGO updates pickup progress (COMING / ARRIVED)
+    @PutMapping("/{id}/pickup-stage")
+    public ResponseEntity<?> updatePickupStage(
+            @PathVariable UUID id,
+            @RequestBody PickupStageUpdateRequest request) {
+        if (request == null || request.getStage() == null || request.getStage().trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("stage is required.");
+        }
+
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User ngo = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+        if (ngo.getRole() != Role.NGO) {
+            return ResponseEntity.status(403).body("Only NGOs can update pickup progress.");
+        }
+
+        FoodListing food = foodRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Food listing not found."));
+        if (food.getClaimedBy() == null || !food.getClaimedBy().getEmail().equals(currentUserEmail)) {
+            return ResponseEntity.status(403).body("You are not authorized to update this pickup.");
+        }
+        if (food.getStatus() != FoodStatus.CLAIMED) {
+            return ResponseEntity.badRequest().body("Pickup progress can only be updated for CLAIMED donations.");
+        }
+
+        PickupStage stage;
+        try {
+            stage = PickupStage.valueOf(request.getStage().trim().toUpperCase());
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body("Invalid stage. Use COMING or ARRIVED.");
+        }
+
+        if (stage != PickupStage.COMING && stage != PickupStage.ARRIVED) {
+            return ResponseEntity.badRequest().body("Invalid stage. Use COMING or ARRIVED.");
+        }
+
+        food.setPickupStage(stage);
+        if (stage == PickupStage.COMING && food.getComingAt() == null) {
+            food.setComingAt(LocalDateTime.now());
+        }
+        if (stage == PickupStage.ARRIVED && food.getArrivedAt() == null) {
+            food.setArrivedAt(LocalDateTime.now());
+        }
+        FoodListing saved = foodRepository.save(food);
+
+        if (saved.getDonor() != null) {
+            DonationTrackerUpdate update = new DonationTrackerUpdate(
+                    "DONATION_TRACKER_UPDATE",
+                    saved.getId(),
+                    stage.name(),
+                    ngo.getId(),
+                    ngo.getOrganizationName(),
+                    saved.getDonor().getId(),
+                    saved.getDonor().getOrganizationName(),
+                    System.currentTimeMillis());
+            messagingTemplate.convertAndSend("/topic/donor/" + saved.getDonor().getId() + "/tracker", update);
+        }
+
+        return ResponseEntity.ok("Pickup stage updated.");
     }
 
     // Day 24: Donor gets secure QR payload after claim
@@ -388,6 +589,26 @@ public class DonationController {
                 true,
                 method,
                 "Handoff verified successfully. Donation marked as COMPLETED.");
+
+        // Notify donor that pickup is completed
+        try {
+            FoodListing refreshed = foodRepository.findByIdWithDonor(food.getId()).orElse(null);
+            if (refreshed != null && refreshed.getDonor() != null) {
+                DonationTrackerUpdate update = new DonationTrackerUpdate(
+                        "DONATION_TRACKER_UPDATE",
+                        refreshed.getId(),
+                        PickupStage.COMPLETED.name(),
+                        currentUser.getId(),
+                        currentUser.getOrganizationName(),
+                        refreshed.getDonor().getId(),
+                        refreshed.getDonor().getOrganizationName(),
+                        System.currentTimeMillis());
+                messagingTemplate.convertAndSend("/topic/donor/" + refreshed.getDonor().getId() + "/tracker", update);
+            }
+        } catch (Exception ignored) {
+            // Keep verification API stable even if WS fails.
+        }
+
         return ResponseEntity.ok(response);
     }
 
@@ -413,7 +634,13 @@ public class DonationController {
 
             FoodResponse response = new FoodResponse(
                     food.getId(), food.getDescription(), food.getQuantity(),
-                    food.getStatus().name(), food.getDonor().getOrganizationName(), responseLat, responseLon);
+                    food.getStatus().name(), food.getDonor().getOrganizationName(),
+                    food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
+                    responseLat, responseLon,
+                    food.getCreatedAt(), food.getExpiresAt(), food.getClaimedAt(), food.getExpectedPickupAt(), food.getCompletedAt(),
+                    food.getPickupStage() != null ? food.getPickupStage().name() : null,
+                    food.getComingAt(),
+                    food.getArrivedAt());
 
             return ResponseEntity.ok(response);
         }
@@ -498,9 +725,26 @@ public class DonationController {
         FoodResponse response = new FoodResponse(
                 savedFood.getId(), savedFood.getDescription(), savedFood.getQuantity(),
                 savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(),
-                responseLat, responseLon);
+                savedFood.getClaimedBy() != null ? savedFood.getClaimedBy().getOrganizationName() : null,
+                responseLat, responseLon,
+                savedFood.getCreatedAt(), savedFood.getExpiresAt(), savedFood.getClaimedAt(), savedFood.getExpectedPickupAt(),
+                savedFood.getCompletedAt(),
+                savedFood.getPickupStage() != null ? savedFood.getPickupStage().name() : null,
+                savedFood.getComingAt(),
+                savedFood.getArrivedAt());
 
         return ResponseEntity.ok(response);
+    }
+
+    private int normalizeMinutes(Integer requestedMinutes, int defaultMinutes, int minMinutes, int maxMinutes) {
+        final int minutes = requestedMinutes == null ? defaultMinutes : requestedMinutes;
+        if (minutes < minMinutes) {
+            return minMinutes;
+        }
+        if (minutes > maxMinutes) {
+            return maxMinutes;
+        }
+        return minutes;
     }
 
     private String generateHandoffPin() {

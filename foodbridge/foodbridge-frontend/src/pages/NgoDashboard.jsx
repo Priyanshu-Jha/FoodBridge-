@@ -8,10 +8,12 @@ import { getApiErrorMessage } from '../utils/errorMessage';
 const NgoDashboard = () => {
     const [availableFood, setAvailableFood] = useState([]);
     const [claimedDonations, setClaimedDonations] = useState([]);
+    const [claimedHistory, setClaimedHistory] = useState([]);
     const [alerts, setAlerts] = useState([]);
     const [notificationInbox, setNotificationInbox] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showInbox, setShowInbox] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const [ngoId, setNgoId] = useState(null);
     const [socketStatus, setSocketStatus] = useState('DISCONNECTED');
     const [loading, setLoading] = useState(true);
@@ -26,7 +28,31 @@ const NgoDashboard = () => {
     const [verifiedIds, setVerifiedIds] = useState([]);
     const [verifyLoading, setVerifyLoading] = useState(false);
     const [actionMessage, setActionMessage] = useState('');
+    const [claimingFoodId, setClaimingFoodId] = useState(null);
+    const [claimPickupMinutes, setClaimPickupMinutes] = useState('60');
+    const [claimError, setClaimError] = useState('');
+    const [claimLoading, setClaimLoading] = useState(false);
     const navigate = useNavigate();
+
+    const formatTimeLeft = (isoString) => {
+        if (!isoString) {
+            return '—';
+        }
+        const msLeft = new Date(isoString).getTime() - Date.now();
+        if (!Number.isFinite(msLeft)) {
+            return '—';
+        }
+        if (msLeft <= 0) {
+            return 'Expired';
+        }
+        const totalMinutes = Math.ceil(msLeft / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours <= 0) {
+            return `${minutes} min`;
+        }
+        return `${hours} hr ${minutes} min`;
+    };
 
     const fetchAvailableFood = async (token) => {
         const response = await axios.get('http://localhost:8080/api/donations/available', {
@@ -42,6 +68,14 @@ const NgoDashboard = () => {
         });
 
         setClaimedDonations(response.data || []);
+    };
+
+    const fetchClaimedHistory = async (token) => {
+        const response = await axios.get('http://localhost:8080/api/donations/claimed-history-by-me', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        setClaimedHistory(response.data || []);
     };
 
     const fetchNotificationInbox = async (token) => {
@@ -104,6 +138,7 @@ const NgoDashboard = () => {
             try {
                 await fetchAvailableFood(token);
                 await fetchClaimedDonations(token);
+                await fetchClaimedHistory(token);
 
                 const me = await axios.get('http://localhost:8080/api/users/me', {
                     headers: { Authorization: `Bearer ${token}` }
@@ -175,15 +210,46 @@ const NgoDashboard = () => {
         };
     }, [ngoId]);
 
-    // ---> NEW FUNCTION TO HANDLE THE BUTTON CLICK <---
-    const handleClaim = async (foodId) => {
-        const token = localStorage.getItem('jwt_token');
-        const selectedFood = availableFood.find((food) => food.id === foodId) || null;
+    const openClaimModal = (foodId) => {
         setActionMessage('');
+        setClaimError('');
+        setClaimPickupMinutes('60');
+        setClaimingFoodId(foodId);
+    };
+
+    const closeClaimModal = () => {
+        if (claimLoading) {
+            return;
+        }
+        setClaimingFoodId(null);
+        setClaimError('');
+    };
+
+    const submitClaim = async () => {
+        if (!claimingFoodId) {
+            return;
+        }
+
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        const selectedFood = availableFood.find((food) => food.id === claimingFoodId) || null;
+        const minutes = claimPickupMinutes.trim() === '' ? null : Number(claimPickupMinutes);
+        if (minutes !== null && (!Number.isFinite(minutes) || minutes <= 0)) {
+            setClaimError('Please enter a valid pickup time in minutes (e.g., 60).');
+            return;
+        }
 
         try {
-            // Send a PUT request to the backend with the specific food ID
-            await axios.put(`http://localhost:8080/api/donations/${foodId}/claim`, {}, {
+            setClaimLoading(true);
+            setClaimError('');
+
+            await axios.put(`http://localhost:8080/api/donations/${claimingFoodId}/claim`, {
+                expectedPickupMinutes: minutes,
+            }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -198,14 +264,50 @@ const NgoDashboard = () => {
                 });
             }
 
-            // Optimistic UI Update: Instantly remove this food from the screen
-            // so no one else accidentally clicks it while the page reloads.
-            setAvailableFood((prevFood) => prevFood.filter(food => food.id !== foodId));
+            setAvailableFood((prevFood) => prevFood.filter(food => food.id !== claimingFoodId));
+
+            const refreshToken = localStorage.getItem('jwt_token');
+            if (refreshToken) {
+                await fetchClaimedHistory(refreshToken);
+            }
 
             setActionMessage('Food successfully claimed. Please arrange pickup with the donor.');
+            setClaimingFoodId(null);
         } catch (err) {
             console.error(err);
-            setActionMessage(getApiErrorMessage(err, 'Failed to claim food. Another NGO might have just taken it.'));
+            setClaimError(getApiErrorMessage(err, 'Failed to claim food. Another NGO might have just taken it.'));
+        } finally {
+            setClaimLoading(false);
+        }
+    };
+
+    const updatePickupStage = async (foodId, stage) => {
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        setActionMessage('');
+        try {
+            await axios.put(`http://localhost:8080/api/donations/${foodId}/pickup-stage`, { stage }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const refreshToken = localStorage.getItem('jwt_token');
+            if (refreshToken) {
+                await fetchClaimedDonations(refreshToken);
+                await fetchClaimedHistory(refreshToken);
+            }
+
+            if (stage === 'COMING') {
+                setActionMessage('Marked as coming for pickup.');
+            } else if (stage === 'ARRIVED') {
+                setActionMessage('Marked as arrived at donor.');
+            }
+        } catch (err) {
+            console.error(err);
+            setActionMessage(getApiErrorMessage(err, 'Failed to update pickup progress.'));
         }
     };
 
@@ -261,6 +363,7 @@ const NgoDashboard = () => {
             const refreshToken = localStorage.getItem('jwt_token');
             if (refreshToken) {
                 await fetchClaimedDonations(refreshToken);
+                await fetchClaimedHistory(refreshToken);
             }
             setActionMessage('Handoff verified and donation completed.');
         } catch (err) {
@@ -298,6 +401,12 @@ const NgoDashboard = () => {
                                 {unreadCount}
                             </span>
                         )}
+                    </button>
+                    <button
+                        onClick={() => setShowHistory((prev) => !prev)}
+                        className="px-4 py-2 bg-slate-100 text-slate-800 rounded hover:bg-slate-200 transition"
+                    >
+                        Pickup History
                     </button>
                     <button
                         onClick={() => {
@@ -366,6 +475,55 @@ const NgoDashboard = () => {
                 </div>
             )}
 
+            {showHistory && (
+                <div className="mb-6 bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-sm font-bold text-slate-900">My Pickup History</h2>
+                        <span className="text-xs text-slate-600">{claimedHistory.length} total</span>
+                    </div>
+
+                    {claimedHistory.length === 0 ? (
+                        <p className="text-sm text-slate-600">No claimed pickups yet.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                            {claimedHistory.map((item) => (
+                                <div key={item.id} className="border border-slate-200 rounded p-3 bg-slate-50">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">
+                                                {item.description} ({item.quantity})
+                                            </p>
+                                            <p className="text-xs text-slate-700 mt-1">
+                                                Donor: {item.donorName}
+                                            </p>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Claimed: {item.claimedAt ? new Date(item.claimedAt).toLocaleString() : '—'}
+                                                {' • '}
+                                                Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : '—'}
+                                            </p>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Location: {item.latitude != null && item.longitude != null
+                                                    ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`
+                                                    : '—'}
+                                            </p>
+                                        </div>
+                                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                            item.status === 'COMPLETED'
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : item.status === 'CLAIMED'
+                                                    ? 'bg-yellow-100 text-yellow-700'
+                                                    : 'bg-slate-200 text-slate-700'
+                                        }`}>
+                                            {item.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <ClaimedPickupMap pickup={claimedPickup} ngoLocation={ngoLocation} />
 
             {claimedDonations.length > 0 && (
@@ -386,6 +544,11 @@ const NgoDashboard = () => {
                                         <p className="font-bold text-gray-800">{food.description}</p>
                                         <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
                                         <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
+                                        <p className="text-xs text-gray-600 mt-1">
+                                            Pickup ETA: {food.expectedPickupAt ? new Date(food.expectedPickupAt).toLocaleString() : '—'}
+                                            {' • '}
+                                            Time left: {formatTimeLeft(food.expectedPickupAt)}
+                                        </p>
                                         {!hasPickupCoordinates && (
                                             <p className="text-xs text-amber-700 mt-1">
                                                 Route unavailable for this pickup because coordinates were not provided.
@@ -409,12 +572,26 @@ const NgoDashboard = () => {
                                     >
                                         {hasPickupCoordinates ? 'Show Route' : 'No Coordinates'}
                                     </button>
-                                    <button
-                                        onClick={() => openVerifyModal(food)}
-                                        className="w-1/2 py-2 bg-teal-600 text-white text-sm font-semibold rounded hover:bg-teal-700 transition"
-                                    >
-                                        Verify Handoff
-                                    </button>
+                                    <div className="w-1/2 flex flex-col gap-2">
+                                        <button
+                                            onClick={() => updatePickupStage(food.id, 'COMING')}
+                                            className="w-full py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 transition"
+                                        >
+                                            Going
+                                        </button>
+                                        <button
+                                            onClick={() => updatePickupStage(food.id, 'ARRIVED')}
+                                            className="w-full py-2 bg-amber-600 text-white text-sm font-semibold rounded hover:bg-amber-700 transition"
+                                        >
+                                            Arrived
+                                        </button>
+                                        <button
+                                            onClick={() => openVerifyModal(food)}
+                                            className="w-full py-2 bg-teal-600 text-white text-sm font-semibold rounded hover:bg-teal-700 transition"
+                                        >
+                                            Pickup
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             );
@@ -455,11 +632,14 @@ const NgoDashboard = () => {
                                 </div>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Quantity:</span> {food.quantity}</p>
                                 <p className="text-gray-600 mb-4"><span className="font-semibold">Donor:</span> {food.donorName}</p>
+                                <p className="text-gray-600 mb-1">
+                                    <span className="font-semibold">Expires in:</span> {formatTimeLeft(food.expiresAt)}
+                                </p>
                             </div>
 
                             {/* We will wire this button up on Day 13! */}
                             <button
-                                onClick={() => handleClaim(food.id)}
+                                onClick={() => openClaimModal(food.id)}
                                 className="w-full mt-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition">
                                 Claim Food
                             </button>
@@ -520,6 +700,66 @@ const NgoDashboard = () => {
                             >
                                 {verifyLoading ? 'Verifying...' : 'Verify Pickup'}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {claimingFoodId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+                        <div className="flex items-start justify-between mb-3">
+                            <h3 className="text-xl font-bold text-gray-800">Confirm Claim</h3>
+                            <button
+                                onClick={closeClaimModal}
+                                disabled={claimLoading}
+                                className="text-gray-500 hover:text-gray-700 text-xl leading-none disabled:opacity-50"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-gray-600 mb-4">
+                            Enter how many minutes you expect before pickup. If you don’t verify handoff by then,
+                            the donation will automatically return to AVAILABLE.
+                        </p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                    Expected pickup time (minutes)
+                                </label>
+                                <input
+                                    value={claimPickupMinutes}
+                                    onChange={(e) => setClaimPickupMinutes(e.target.value)}
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    className="w-full border rounded p-2 text-sm"
+                                    placeholder="60"
+                                />
+                            </div>
+
+                            {claimError && (
+                                <p className="text-sm text-red-600">{claimError}</p>
+                            )}
+
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    onClick={closeClaimModal}
+                                    disabled={claimLoading}
+                                    className="w-1/2 py-2 bg-slate-100 text-slate-700 font-semibold rounded hover:bg-slate-200 transition disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitClaim}
+                                    disabled={claimLoading}
+                                    className="w-1/2 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition disabled:bg-blue-300"
+                                >
+                                    {claimLoading ? 'Claiming...' : 'Claim Donation'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
