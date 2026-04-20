@@ -136,9 +136,9 @@ const execute = async () => {
 
             const pinLine = donorPage.locator('p', { hasText: 'Backup PIN:' }).first();
             const pinText = await pinLine.textContent();
-            const pinMatch = pinText?.match(/(\d{6})/);
+            const pinMatch = pinText?.match(/(\d{4})/);
             if (!pinMatch) {
-                throw new Error('Could not extract 6-digit backup PIN from donor modal.');
+                throw new Error('Could not extract 4-digit backup PIN from donor modal.');
             }
             backupPin = pinMatch[1];
 
@@ -150,7 +150,7 @@ const execute = async () => {
             await claimedCard.getByRole('button', { name: 'Verify Handoff' }).click();
 
             await ngoPage.getByRole('heading', { name: 'Verify Handoff' }).waitFor({ timeout: 10000 });
-            await ngoPage.getByPlaceholder('Enter 6-digit PIN').fill(backupPin);
+            await ngoPage.getByPlaceholder('Enter 4-digit PIN').fill(backupPin);
             await ngoPage.getByRole('button', { name: 'Verify Pickup' }).click();
             await ngoPage.getByText('Verified via PIN').waitFor({ timeout: 20000 });
             await ngoPage.getByText('Handoff verified and donation completed.').waitFor({ timeout: 20000 });

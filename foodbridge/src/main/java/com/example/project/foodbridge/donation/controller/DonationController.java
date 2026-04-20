@@ -70,12 +70,16 @@ public class DonationController {
         food.setQuantity(request.getQuantity());
         food.setDonor(donor);
 
-        // ---> NEW: GIS GEOMETRY CREATION <---
-        if (request.getLatitude() != null && request.getLongitude() != null) {
-            GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
-            // WARNING: Geographic systems always use (Longitude = X, Latitude = Y)
-            Point location = geometryFactory.createPoint(new Coordinate(request.getLongitude(), request.getLatitude()));
-            food.setLocation(location);
+        if (hasPartialCoordinates(request)) {
+            return ResponseEntity.badRequest().body("Please provide both latitude and longitude together.");
+        }
+
+        // Use request coordinates when provided, otherwise reuse donor's saved
+        // location.
+        if (hasBothCoordinates(request)) {
+            food.setLocation(buildPoint(request.getLatitude(), request.getLongitude()));
+        } else if (donor.getLocation() != null) {
+            food.setLocation(donor.getLocation());
         }
 
         // Save to db
@@ -475,11 +479,13 @@ public class DonationController {
         food.setDescription(request.getDescription());
         food.setQuantity(request.getQuantity());
 
+        if (hasPartialCoordinates(request)) {
+            return ResponseEntity.badRequest().body("Please provide both latitude and longitude together.");
+        }
+
         // Step F: Update location if they moved
-        if (request.getLatitude() != null && request.getLongitude() != null) {
-            GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
-            Point location = geometryFactory.createPoint(new Coordinate(request.getLongitude(), request.getLatitude()));
-            food.setLocation(location);
+        if (hasBothCoordinates(request)) {
+            food.setLocation(buildPoint(request.getLatitude(), request.getLongitude()));
         }
 
         // Step G: Save to database
@@ -498,7 +504,8 @@ public class DonationController {
     }
 
     private String generateHandoffPin() {
-        return String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+        int pin = ThreadLocalRandom.current().nextInt(0, 10000);
+        return String.format("%04d", pin);
     }
 
     private String buildHandoffQrPayload(FoodListing food) {
@@ -534,5 +541,18 @@ public class DonationController {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean hasBothCoordinates(CreateFoodRequest request) {
+        return request.getLatitude() != null && request.getLongitude() != null;
+    }
+
+    private boolean hasPartialCoordinates(CreateFoodRequest request) {
+        return (request.getLatitude() == null) != (request.getLongitude() == null);
+    }
+
+    private Point buildPoint(Double latitude, Double longitude) {
+        GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
+        return geometryFactory.createPoint(new Coordinate(longitude, latitude));
     }
 }

@@ -376,13 +376,21 @@ const NgoDashboard = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {claimedDonations.map((food) => (
+                        {claimedDonations.map((food) => {
+                            const hasPickupCoordinates = food.latitude != null && food.longitude != null;
+
+                            return (
                             <div key={food.id} className="border border-teal-100 rounded-lg p-4 bg-teal-50/40">
                                 <div className="flex items-start justify-between gap-2">
                                     <div>
                                         <p className="font-bold text-gray-800">{food.description}</p>
                                         <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
                                         <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
+                                        {!hasPickupCoordinates && (
+                                            <p className="text-xs text-amber-700 mt-1">
+                                                Route unavailable for this pickup because coordinates were not provided.
+                                            </p>
+                                        )}
                                     </div>
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full ${
                                         verifiedIds.includes(food.id)
@@ -396,9 +404,10 @@ const NgoDashboard = () => {
                                 <div className="mt-3 flex gap-2">
                                     <button
                                         onClick={() => setClaimedPickup(food)}
-                                        className="w-1/2 py-2 bg-slate-100 text-slate-700 text-sm font-semibold rounded hover:bg-slate-200 transition"
+                                        disabled={!hasPickupCoordinates}
+                                        className="w-1/2 py-2 bg-slate-100 text-slate-700 text-sm font-semibold rounded hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Show Route
+                                        {hasPickupCoordinates ? 'Show Route' : 'No Coordinates'}
                                     </button>
                                     <button
                                         onClick={() => openVerifyModal(food)}
@@ -408,7 +417,8 @@ const NgoDashboard = () => {
                                     </button>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -493,7 +503,7 @@ const NgoDashboard = () => {
                                     value={verificationPin}
                                     onChange={(e) => setVerificationPin(e.target.value)}
                                     className="w-full border rounded p-2 text-sm"
-                                    placeholder='Enter 6-digit PIN'
+                                    placeholder='Enter 4-digit PIN'
                                 />
                             </div>
 

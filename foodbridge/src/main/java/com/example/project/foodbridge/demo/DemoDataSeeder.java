@@ -128,7 +128,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                 FoodStatus.CLAIMED,
                 18.5190,
                 73.8524,
-                "654321",
+                "6543",
                 UUID.randomUUID().toString(),
                 geometryFactory);
 

@@ -197,6 +197,16 @@ const DonorDashboard = () => {
                                         {food.status}
                                     </span>
                                 </p>
+                                <p className="text-gray-600 mb-2">
+                                    <span className="font-semibold">Route:</span>
+                                    <span className={`ml-2 px-3 py-1 rounded-full text-xs font-bold ${
+                                        food.latitude != null && food.longitude != null
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                        {food.latitude != null && food.longitude != null ? 'READY' : 'MISSING COORDINATES'}
+                                    </span>
+                                </p>
                             </div>
                             <div className="flex flex-col mt-4 gap-2">
                                 <p className="text-xs text-gray-400 text-right mb-2">ID: {food.id.substring(0, 8)}...</p>

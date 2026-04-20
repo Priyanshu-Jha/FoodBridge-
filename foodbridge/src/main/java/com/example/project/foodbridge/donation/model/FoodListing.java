@@ -43,7 +43,7 @@ public class FoodListing {
     @JoinColumn(name = "claimed_by_id")
     private User claimedBy;
 
-    @Column(length = 6)
+    @Column(length = 4)
     private String handoffPin;
 
     @Column(length = 64)

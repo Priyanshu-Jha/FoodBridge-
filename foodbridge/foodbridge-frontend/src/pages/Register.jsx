@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
 
 const Register = () => {
@@ -102,6 +102,10 @@ const Register = () => {
                     Register
                 </button>
             </form>
+
+            <p className="mt-4 text-sm text-gray-600">
+                Already have an account? <Link to="/login" className="text-blue-600 hover:underline">Back to Login</Link>
+            </p>
         </div>
     );
 };

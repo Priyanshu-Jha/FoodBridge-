@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -12,12 +12,42 @@ const LogSurplus = () => {
     const foodData = location.state?.foodData || null;
     const [serverError, setServerError] = useState('');
 
-    const { register, handleSubmit, formState: { errors } } = useForm({
+    const { register, handleSubmit, setValue, formState: { errors } } = useForm({
         defaultValues: {
             description: foodData ? foodData.description : '',
-            quantity: foodData ? foodData.quantity : ''
+            quantity: foodData ? foodData.quantity : '',
+            latitude: foodData?.latitude ?? '',
+            longitude: foodData?.longitude ?? '',
         }
     });
+
+    useEffect(() => {
+        const prefillFromMyLocation = async () => {
+            if (editMode) {
+                return;
+            }
+
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                return;
+            }
+
+            try {
+                const me = await axios.get('http://localhost:8080/api/users/me', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (me.data?.latitude != null && me.data?.longitude != null) {
+                    setValue('latitude', String(me.data.latitude));
+                    setValue('longitude', String(me.data.longitude));
+                }
+            } catch (error) {
+                // Ignore location prefill failures and keep form usable.
+            }
+        };
+
+        prefillFromMyLocation();
+    }, [editMode, setValue]);
 
     const onSubmit = async (data) => {
         setServerError('');
@@ -27,13 +57,28 @@ const LogSurplus = () => {
             return;
         }
 
+        const latitude = data.latitude === '' ? null : Number(data.latitude);
+        const longitude = data.longitude === '' ? null : Number(data.longitude);
+
+        if ((latitude === null) !== (longitude === null)) {
+            setServerError('Please provide both latitude and longitude, or leave both empty.');
+            return;
+        }
+
+        const payload = {
+            description: data.description,
+            quantity: data.quantity,
+            latitude,
+            longitude,
+        };
+
         try {
             if (editMode) {
-                await axios.put(`http://localhost:8080/api/donations/${foodData.id}`, data, {
+                await axios.put(`http://localhost:8080/api/donations/${foodData.id}`, payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             } else {
-                await axios.post('http://localhost:8080/api/donations', data, {
+                await axios.post('http://localhost:8080/api/donations', payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             }
@@ -86,6 +131,29 @@ const LogSurplus = () => {
                         />
                         {errors.quantity && <span className="text-red-500 text-sm">Required</span>}
                     </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2">Pickup Latitude (optional)</label>
+                        <input
+                            type="number"
+                            step="any"
+                            {...register('latitude')}
+                            className="w-full p-2 border rounded"
+                            placeholder="e.g., 18.5204"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2">Pickup Longitude (optional)</label>
+                        <input
+                            type="number"
+                            step="any"
+                            {...register('longitude')}
+                            className="w-full p-2 border rounded"
+                            placeholder="e.g., 73.8567"
+                        />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                        If left blank, we will use your saved account location when available.
+                    </p>
                     <button
                         type="submit"
                         className="w-full py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 transition"

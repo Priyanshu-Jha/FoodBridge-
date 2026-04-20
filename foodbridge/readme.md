@@ -9,6 +9,13 @@ Run these commands from the project root:
 3. `cd foodbridge-frontend`
 4. `npm run dev`
 
+Optional Day 23 routing key setup (frontend):
+
+1. `cd foodbridge-frontend`
+2. `copy .env.example .env`
+3. Set `VITE_MAPBOX_DIRECTIONS_TOKEN` in `.env`
+4. Restart `npm run dev`
+
 ## Day 28 Demo Prep Helpers
 
 1. Start backend with demo data seeding:

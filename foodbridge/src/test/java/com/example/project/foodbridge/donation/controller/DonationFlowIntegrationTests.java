@@ -3,13 +3,13 @@ package com.example.project.foodbridge.donation.controller;
 import com.example.project.foodbridge.donation.FoodListingRepository;
 import com.example.project.foodbridge.donation.model.FoodListing;
 import com.example.project.foodbridge.donation.model.FoodStatus;
-import com.example.project.foodbridge.notification.repository.NotificationRepository;
 import com.example.project.foodbridge.security.JwtService;
 import com.example.project.foodbridge.user.model.Role;
 import com.example.project.foodbridge.user.model.User;
 import com.example.project.foodbridge.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -52,16 +53,26 @@ class DonationFlowIntegrationTests {
     private FoodListingRepository foodListingRepository;
 
     @Autowired
-    private NotificationRepository notificationRepository;
-
-    @Autowired
     private JwtService jwtService;
 
+    private final List<UUID> createdUserIds = new ArrayList<>();
+    private final List<UUID> createdListingIds = new ArrayList<>();
+
     @BeforeEach
-    void cleanDatabase() {
-        notificationRepository.deleteAllInBatch();
-        foodListingRepository.deleteAllInBatch();
-        userRepository.deleteAllInBatch();
+    void resetTracking() {
+        createdUserIds.clear();
+        createdListingIds.clear();
+    }
+
+    @AfterEach
+    void cleanCreatedRecordsOnly() {
+        if (!createdListingIds.isEmpty()) {
+            foodListingRepository.deleteAllById(createdListingIds);
+        }
+
+        if (!createdUserIds.isEmpty()) {
+            userRepository.deleteAllById(createdUserIds);
+        }
     }
 
     @Test
@@ -172,13 +183,17 @@ class DonationFlowIntegrationTests {
     }
 
     private User createUser(String email, Role role) {
+        String uniqueEmail = email.replace("@", "+" + UUID.randomUUID().toString().substring(0, 8) + "@");
+
         User user = new User();
-        user.setEmail(email);
+        user.setEmail(uniqueEmail);
         user.setPassword("encoded-password");
         user.setOrganizationName(role.name() + " Org");
         user.setContactNumber("1234567890");
         user.setRole(role);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        createdUserIds.add(saved.getId());
+        return saved;
     }
 
     private FoodListing createAvailableListing(User donor, String description) {
@@ -187,7 +202,9 @@ class DonationFlowIntegrationTests {
         listing.setQuantity("10 boxes");
         listing.setStatus(FoodStatus.AVAILABLE);
         listing.setDonor(donor);
-        return foodListingRepository.save(listing);
+        FoodListing saved = foodListingRepository.save(listing);
+        createdListingIds.add(saved.getId());
+        return saved;
     }
 
     private String bearerToken(User user) {

@@ -5,6 +5,9 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
+const MAPBOX_DIRECTIONS_TOKEN = import.meta.env.VITE_MAPBOX_DIRECTIONS_TOKEN;
+const MAPBOX_PROFILE = import.meta.env.VITE_MAPBOX_PROFILE || 'driving';
+
 // Fix default marker icons in Vite builds.
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -64,13 +67,19 @@ const ClaimedPickupMap = ({ pickup, ngoLocation }) => {
         const pickupLon = pickup.longitude;
 
         const controller = new AbortController();
+        const mapboxToken = MAPBOX_DIRECTIONS_TOKEN ? MAPBOX_DIRECTIONS_TOKEN.trim() : '';
+        const profile = MAPBOX_PROFILE ? MAPBOX_PROFILE.trim() : 'driving';
+
+        const directionsUrl = mapboxToken
+            ? `https://api.mapbox.com/directions/v5/mapbox/${profile}/${ngoLon},${ngoLat};${pickupLon},${pickupLat}?overview=full&geometries=geojson&access_token=${encodeURIComponent(mapboxToken)}`
+            : `https://router.project-osrm.org/route/v1/driving/${ngoLon},${ngoLat};${pickupLon},${pickupLat}?overview=full&geometries=geojson`;
+
         const fetchRoute = async () => {
             setIsRouting(true);
             setRouteError('');
 
             try {
-                const url = `https://router.project-osrm.org/route/v1/driving/${ngoLon},${ngoLat};${pickupLon},${pickupLat}?overview=full&geometries=geojson`;
-                const response = await fetch(url, { signal: controller.signal });
+                const response = await fetch(directionsUrl, { signal: controller.signal });
                 if (!response.ok) {
                     throw new Error('Routing service failed');
                 }
@@ -145,7 +154,9 @@ const ClaimedPickupMap = ({ pickup, ngoLocation }) => {
         return (
             <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h2 className="text-sm font-bold text-yellow-900 mb-1">Claimed Pickup Map</h2>
-                <p className="text-sm text-yellow-800">This claimed donation does not include coordinates.</p>
+                <p className="text-sm text-yellow-800">
+                    This claimed donation does not include coordinates, so route and ETA cannot be calculated.
+                </p>
             </div>
         );
     }

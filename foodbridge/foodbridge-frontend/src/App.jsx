@@ -17,8 +17,8 @@ const AxiosInterceptor = ({ children }) => {
         const interceptor = axios.interceptors.response.use(
             (response) => response, // If the request is successful, just pass it through
             (error) => {
-                // If the server throws a 401 (Unauthorized) or 403 (Forbidden)
-                if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                // Only auto-logout for 401 (expired/invalid session).
+                if (error.response && error.response.status === 401) {
                     const authMessage = getApiErrorMessage(error, 'Your session has expired. Please log in again.');
                     sessionStorage.setItem('auth_message', authMessage);
                     localStorage.clear(); // Wipe the dead token
