@@ -43,6 +43,12 @@ public class FoodListing {
     @JoinColumn(name = "claimed_by_id")
     private User claimedBy;
 
+    @Column(length = 6)
+    private String handoffPin;
+
+    @Column(length = 64)
+    private String handoffToken;
+
     // ---------------------------------
     @CreationTimestamp
     @Column(updatable = false)
@@ -55,27 +61,83 @@ public class FoodListing {
     }
 
     // Getters and Setters
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public UUID getId() {
+        return id;
+    }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public void setId(UUID id) {
+        this.id = id;
+    }
 
-    public String getQuantity() { return quantity; }
-    public void setQuantity(String quantity) { this.quantity = quantity; }
+    public String getDescription() {
+        return description;
+    }
 
-    public FoodStatus getStatus() { return status; }
-    public void setStatus(FoodStatus status) { this.status = status; }
+    public void setDescription(String description) {
+        this.description = description;
+    }
 
-    public User getDonor() { return donor; }
-    public void setDonor(User donor) { this.donor = donor; }
+    public String getQuantity() {
+        return quantity;
+    }
 
-    public User getClaimedBy() { return claimedBy; }
-    public void setClaimedBy(User claimedBy) { this.claimedBy = claimedBy; }
+    public void setQuantity(String quantity) {
+        this.quantity = quantity;
+    }
 
-    public Long getVersion() { return version; }
-    public void setVersion(Long version) { this.version = version; }
+    public FoodStatus getStatus() {
+        return status;
+    }
 
-    public Point getLocation() { return location; }
-    public void setLocation(Point location) { this.location = location; }
+    public void setStatus(FoodStatus status) {
+        this.status = status;
+    }
+
+    public User getDonor() {
+        return donor;
+    }
+
+    public void setDonor(User donor) {
+        this.donor = donor;
+    }
+
+    public User getClaimedBy() {
+        return claimedBy;
+    }
+
+    public void setClaimedBy(User claimedBy) {
+        this.claimedBy = claimedBy;
+    }
+
+    public String getHandoffPin() {
+        return handoffPin;
+    }
+
+    public void setHandoffPin(String handoffPin) {
+        this.handoffPin = handoffPin;
+    }
+
+    public String getHandoffToken() {
+        return handoffToken;
+    }
+
+    public void setHandoffToken(String handoffToken) {
+        this.handoffToken = handoffToken;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
+    public Point getLocation() {
+        return location;
+    }
+
+    public void setLocation(Point location) {
+        this.location = location;
+    }
 }

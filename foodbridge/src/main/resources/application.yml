@@ -8,7 +8,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -18,3 +18,11 @@ spring:
     user:
       name: root
       password: root
+
+app:
+  matching:
+    default-radius-km: 5
+  cors:
+    allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*
+  demo:
+    seed-enabled: false

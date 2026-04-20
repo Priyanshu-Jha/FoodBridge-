@@ -1,4 +1,4 @@
-Done Days: 1
+Done Days: 1-28
 Week 1: The Foundation & Security
 Goal: Set up the environments, database, and secure user login.
 

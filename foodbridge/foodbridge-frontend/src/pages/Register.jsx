@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { getApiErrorMessage } from '../utils/errorMessage';
 
 const Register = () => {
     // 1. Setting up React State
@@ -9,7 +10,9 @@ const Register = () => {
         password: '',
         organizationName: '',
         contactNumber: '',
-        role: 'DONOR' // Default value
+        role: 'DONOR', // Default value
+        latitude: '',
+        longitude: ''
     });
     const [error, setError] = useState('');
     const navigate = useNavigate();
@@ -23,20 +26,25 @@ const Register = () => {
     const handleSubmit = async (e) => {
         e.preventDefault(); // Stops the page from refreshing
         try {
+            const payload = {
+                ...formData,
+                latitude: formData.latitude === '' ? null : Number(formData.latitude),
+                longitude: formData.longitude === '' ? null : Number(formData.longitude)
+            };
+
             // Send the POST request to Spring Boot
-            const response = await axios.post('http://localhost:8080/api/auth/register', formData);
+            const response = await axios.post('http://localhost:8080/api/auth/register', payload);
 
             // ---> NEW: Save BOTH the token and the role
             localStorage.setItem('jwt_token', response.data.token);
             localStorage.setItem('user_role', response.data.role);
 
             // Redirect to a dashboard (we will build this later)
-            alert("Registration Successful!");
             navigate('/');
 
         } catch (err) {
             console.error(err);
-            setError('Registration failed. Please check your details.');
+            setError(getApiErrorMessage(err, 'Registration failed. Please check your details.'));
         }
     };
 
@@ -78,6 +86,17 @@ const Register = () => {
                     <option value="DONOR">Food Donor (Restaurant/Bakery)</option>
                     <option value="NGO">NGO / Food Bank</option>
                 </select>
+
+                <input
+                    type="number" step="any" name="latitude" placeholder="Latitude (optional, e.g. 18.5204)"
+                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
+                    value={formData.latitude} onChange={handleChange}
+                />
+                <input
+                    type="number" step="any" name="longitude" placeholder="Longitude (optional, e.g. 73.8567)"
+                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
+                    value={formData.longitude} onChange={handleChange}
+                />
 
                 <button type="submit" className="mt-4 p-3 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">
                     Register

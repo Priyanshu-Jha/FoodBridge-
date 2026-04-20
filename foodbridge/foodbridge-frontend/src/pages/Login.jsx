@@ -1,11 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import { getApiErrorMessage } from '../utils/errorMessage';
 
 const Login = () => {
     const [credentials, setCredentials] = useState({ email: '', password: '' });
     const [error, setError] = useState('');
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const authMessage = sessionStorage.getItem('auth_message');
+        if (authMessage) {
+            setError(authMessage);
+            sessionStorage.removeItem('auth_message');
+        }
+    }, []);
 
     const handleChange = (e) => {
         setCredentials({ ...credentials, [e.target.name]: e.target.value });
@@ -21,12 +30,11 @@ const Login = () => {
             localStorage.setItem('jwt_token', response.data.token);
             localStorage.setItem('user_role', response.data.role);
 
-            alert("Login Successful!");
             navigate('/');
 
         } catch (err) {
             console.error(err);
-            setError('Invalid email or password.');
+            setError(getApiErrorMessage(err, 'Invalid email or password.'));
         }
     };
 

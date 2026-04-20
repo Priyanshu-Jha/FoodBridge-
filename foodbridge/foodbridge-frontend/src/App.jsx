@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DonorDashboard from "./pages/DonorDashboard.jsx";
 import LogSurplus from "./pages/LogSurplus.jsx";
 import NgoDashboard from "./pages/NgoDashboard.jsx";
+import { getApiErrorMessage } from './utils/errorMessage';
 
 // ---> NEW COMPONENT: The Global Interceptor <---
 const AxiosInterceptor = ({ children }) => {
@@ -18,10 +19,10 @@ const AxiosInterceptor = ({ children }) => {
             (error) => {
                 // If the server throws a 401 (Unauthorized) or 403 (Forbidden)
                 if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                    console.warn("Session expired or unauthorized. Redirecting to login...");
-                    alert("Your session has expired. Please log in again.");
+                    const authMessage = getApiErrorMessage(error, 'Your session has expired. Please log in again.');
+                    sessionStorage.setItem('auth_message', authMessage);
                     localStorage.clear(); // Wipe the dead token
-                    navigate('/login');   // Kick them to the login page
+                    navigate('/login', { replace: true });   // Kick them to the login page
                 }
                 return Promise.reject(error);
             }
