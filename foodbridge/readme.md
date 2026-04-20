@@ -9,6 +9,20 @@ Run these commands from the project root:
 3. `cd foodbridge-frontend`
 4. `npm run dev`
 
+## NGO Handoff Verification Flow
+
+1. NGO claims a listing from New Food Requests.
+2. NGO marks pickup phases in order: `Mark Pickup Out` -> `Mark Received`.
+3. Donor opens `Show Handoff QR` on donor dashboard.
+4. NGO opens `Verify Handoff` and uses `Scan QR with Camera` (or backup PIN).
+5. After successful verification, record moves to `Received Food` section.
+
+## NGO Pickup Buckets
+
+1. `New Food Requests`: available donations not yet claimed.
+2. `In Progress Pickups`: claimed donations currently in transfer workflow.
+3. `Received Food`: completed handoff records for the NGO.
+
 Optional Day 23 routing key setup (frontend):
 
 1. `cd foodbridge-frontend`

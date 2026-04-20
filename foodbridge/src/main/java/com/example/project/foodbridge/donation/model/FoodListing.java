@@ -49,6 +49,16 @@ public class FoodListing {
     @Column(length = 64)
     private String handoffToken;
 
+    private LocalDateTime expiresAt;
+
+    private LocalDateTime claimedAt;
+
+    private LocalDateTime pickupOutAt;
+
+    private LocalDateTime receivedAt;
+
+    private LocalDateTime completedAt;
+
     // ---------------------------------
     @CreationTimestamp
     @Column(updatable = false)
@@ -139,5 +149,53 @@ public class FoodListing {
 
     public void setLocation(Point location) {
         this.location = location;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public LocalDateTime getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(LocalDateTime claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public LocalDateTime getPickupOutAt() {
+        return pickupOutAt;
+    }
+
+    public void setPickupOutAt(LocalDateTime pickupOutAt) {
+        this.pickupOutAt = pickupOutAt;
+    }
+
+    public LocalDateTime getReceivedAt() {
+        return receivedAt;
+    }
+
+    public void setReceivedAt(LocalDateTime receivedAt) {
+        this.receivedAt = receivedAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 }

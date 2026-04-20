@@ -22,12 +22,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -70,6 +70,11 @@ public class DonationController {
         food.setQuantity(request.getQuantity());
         food.setDonor(donor);
 
+        if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(LocalDateTime.now())) {
+            return ResponseEntity.badRequest().body("Expiry time must be in the future.");
+        }
+        food.setExpiresAt(request.getExpiresAt());
+
         if (hasPartialCoordinates(request)) {
             return ResponseEntity.badRequest().body("Please provide both latitude and longitude together.");
         }
@@ -94,21 +99,7 @@ public class DonationController {
         // Day 18: trigger matching workflow for nearby NGOs
         eventPublisher.publishEvent(new DonationCreatedEvent(savedFood.getId()));
 
-        // Update the response to include the coordinates
-        Double responseLat = savedFood.getLocation() != null ? savedFood.getLocation().getY() : null;
-        Double responseLon = savedFood.getLocation() != null ? savedFood.getLocation().getX() : null;
-
-        // Map to DTO and return
-        FoodResponse response = new FoodResponse(
-                savedFood.getId(),
-                savedFood.getDescription(),
-                savedFood.getQuantity(),
-                savedFood.getStatus().name(),
-                savedFood.getDonor().getOrganizationName(),
-                responseLat,
-                responseLon
-
-        );
+        FoodResponse response = toFoodResponse(savedFood);
         return ResponseEntity.ok(response);
     }
 
@@ -118,6 +109,8 @@ public class DonationController {
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lon,
             @RequestParam(defaultValue = "5000") Double radius) {
+        purgeExpiredListings();
+
         // Step A: Query the database for food with status "AVAILABLE"
         List<FoodListing> availableFood;
 
@@ -129,17 +122,7 @@ public class DonationController {
 
         // Step B: Convert the List of Entities into a List of clean DTOs
         List<FoodResponse> responseList = availableFood.stream()
-                .map(food -> {
-
-                    return new FoodResponse(
-                            food.getId(),
-                            food.getDescription(),
-                            food.getQuantity(),
-                            food.getStatus().name(),
-                            food.getDonor().getOrganizationName(),
-                            food.getLocation() != null ? food.getLocation().getY() : null,
-                            food.getLocation() != null ? food.getLocation().getX() : null);
-                })
+                .map(this::toFoodResponse)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responseList);
@@ -148,6 +131,8 @@ public class DonationController {
     // 3. Endpoint for a Donor to see their own history
     @GetMapping("/me")
     public ResponseEntity<List<FoodResponse>> getMyDonations() {
+        purgeExpiredListings();
+
         // Find who is logged in
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
@@ -156,14 +141,7 @@ public class DonationController {
 
         // Convert to DTOs
         List<FoodResponse> responseList = myFood.stream()
-                .map(food -> new FoodResponse(
-                        food.getId(),
-                        food.getDescription(),
-                        food.getQuantity(),
-                        food.getStatus().name(),
-                        food.getDonor().getOrganizationName(),
-                        food.getLocation() != null ? food.getLocation().getY() : null,
-                        food.getLocation() != null ? food.getLocation().getX() : null))
+                .map(this::toFoodResponse)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responseList);
@@ -172,6 +150,8 @@ public class DonationController {
     // Day 25: Endpoint for NGO to see currently claimed pickups
     @GetMapping("/claimed-by-me")
     public ResponseEntity<?> getMyClaimedDonations() {
+        purgeExpiredListings();
+
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         User currentUser = userRepository.findByEmail(currentUserEmail)
                 .orElseThrow(() -> new NoSuchElementException("User not found."));
@@ -183,14 +163,29 @@ public class DonationController {
         List<FoodListing> claimedFood = foodRepository.findByClaimedBy_EmailAndStatus(currentUserEmail,
                 FoodStatus.CLAIMED);
         List<FoodResponse> responseList = claimedFood.stream()
-                .map(food -> new FoodResponse(
-                        food.getId(),
-                        food.getDescription(),
-                        food.getQuantity(),
-                        food.getStatus().name(),
-                        food.getDonor().getOrganizationName(),
-                        food.getLocation() != null ? food.getLocation().getY() : null,
-                        food.getLocation() != null ? food.getLocation().getX() : null))
+                .map(this::toFoodResponse)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(responseList);
+    }
+
+    @GetMapping("/completed-by-me")
+    public ResponseEntity<?> getMyCompletedDonations() {
+        purgeExpiredListings();
+
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+
+        if (currentUser.getRole() != Role.NGO) {
+            return ResponseEntity.status(403).body("Only NGOs can access completed pickups.");
+        }
+
+        List<FoodListing> completedFood = foodRepository.findByClaimedBy_EmailAndStatus(currentUserEmail,
+                FoodStatus.COMPLETED);
+
+        List<FoodResponse> responseList = completedFood.stream()
+                .map(this::toFoodResponse)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(responseList);
@@ -199,21 +194,12 @@ public class DonationController {
     // Endpoint to get a specific food listing by ID
     @GetMapping("/{id}")
     public ResponseEntity<?> getFoodById(@PathVariable UUID id) {
+        purgeExpiredListings();
+
         FoodListing food = foodRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Food listing not found."));
 
-        Double responseLat = food.getLocation() != null ? food.getLocation().getY() : null;
-        Double responseLon = food.getLocation() != null ? food.getLocation().getX() : null;
-
-        FoodResponse response = new FoodResponse(
-                food.getId(),
-                food.getDescription(),
-                food.getQuantity(),
-                food.getStatus().name(),
-                food.getDonor().getOrganizationName(),
-                responseLat,
-                responseLon);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toFoodResponse(food));
     }
 
     // Day 16: Find NGOs near a specific donation location
@@ -263,6 +249,8 @@ public class DonationController {
     // 4. Endpoint for an NGO to claim available food
     @PutMapping("/{id}/claim")
     public ResponseEntity<?> claimFood(@PathVariable UUID id) {
+        purgeExpiredListings();
+
         // Step A: Find the logged-in NGO
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         User ngo = userRepository.findByEmail(currentUserEmail)
@@ -281,9 +269,19 @@ public class DonationController {
             return ResponseEntity.badRequest().body("This food has already been claimed or cancelled.");
         }
 
+        if (isExpired(food)) {
+            foodRepository.deleteNotificationsByFoodListingId(food.getId());
+            foodRepository.deleteById(food.getId());
+            return ResponseEntity.badRequest().body("This listing expired and was removed.");
+        }
+
         // Step D: Update the food record
         food.setStatus(FoodStatus.CLAIMED);
         food.setClaimedBy(ngo); // Link the NGO to the food!
+        food.setClaimedAt(LocalDateTime.now());
+        food.setPickupOutAt(null);
+        food.setReceivedAt(null);
+        food.setCompletedAt(null);
         if (food.getHandoffPin() == null || food.getHandoffToken() == null) {
             food.setHandoffPin(generateHandoffPin());
             food.setHandoffToken(UUID.randomUUID().toString());
@@ -292,15 +290,70 @@ public class DonationController {
         // Step E: Save the changes
         FoodListing savedFood = foodRepository.save(food);
 
-        Double responseLat = savedFood.getLocation() != null ? savedFood.getLocation().getY() : null;
-        Double responseLon = savedFood.getLocation() != null ? savedFood.getLocation().getX() : null;
-
         // Step F: Return success
-        FoodResponse response = new FoodResponse(
-                savedFood.getId(), savedFood.getDescription(), savedFood.getQuantity(),
-                savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(), responseLat, responseLon);
+        return ResponseEntity.ok(toFoodResponse(savedFood));
+    }
 
-        return ResponseEntity.ok(response);
+    @PutMapping("/{id}/pickup-out")
+    public ResponseEntity<?> markPickupOut(@PathVariable UUID id) {
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User ngo = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+
+        if (ngo.getRole() != Role.NGO) {
+            return ResponseEntity.status(403).body("Only NGOs can update pickup phase.");
+        }
+
+        FoodListing food = foodRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Food listing not found."));
+
+        if (food.getClaimedBy() == null || !currentUserEmail.equals(food.getClaimedBy().getEmail())) {
+            return ResponseEntity.status(403).body("You are not authorized to update this pickup.");
+        }
+
+        if (food.getStatus() != FoodStatus.CLAIMED) {
+            return ResponseEntity.badRequest().body("Only CLAIMED donations can move to pickup-out phase.");
+        }
+
+        if (food.getPickupOutAt() == null) {
+            food.setPickupOutAt(LocalDateTime.now());
+            food = foodRepository.save(food);
+        }
+
+        return ResponseEntity.ok(toFoodResponse(food));
+    }
+
+    @PutMapping("/{id}/received")
+    public ResponseEntity<?> markReceived(@PathVariable UUID id) {
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User ngo = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+
+        if (ngo.getRole() != Role.NGO) {
+            return ResponseEntity.status(403).body("Only NGOs can update receive phase.");
+        }
+
+        FoodListing food = foodRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Food listing not found."));
+
+        if (food.getClaimedBy() == null || !currentUserEmail.equals(food.getClaimedBy().getEmail())) {
+            return ResponseEntity.status(403).body("You are not authorized to update this pickup.");
+        }
+
+        if (food.getStatus() != FoodStatus.CLAIMED) {
+            return ResponseEntity.badRequest().body("Only CLAIMED donations can move to received phase.");
+        }
+
+        if (food.getPickupOutAt() == null) {
+            return ResponseEntity.badRequest().body("Mark pickup-out first before marking as received.");
+        }
+
+        if (food.getReceivedAt() == null) {
+            food.setReceivedAt(LocalDateTime.now());
+            food = foodRepository.save(food);
+        }
+
+        return ResponseEntity.ok(toFoodResponse(food));
     }
 
     // Day 24: Donor gets secure QR payload after claim
@@ -359,6 +412,11 @@ public class DonationController {
             return ResponseEntity.badRequest().body("Handoff can only be verified for CLAIMED donations.");
         }
 
+        if (food.getPickupOutAt() == null || food.getReceivedAt() == null) {
+            return ResponseEntity.badRequest()
+                    .body("Complete pickup phases first: mark pickup-out and received before final verification.");
+        }
+
         if (request == null ||
                 (isBlank(request.getQrPayload()) && isBlank(request.getHandoffPin()))) {
             return ResponseEntity.badRequest().body("Provide either qrPayload or handoffPin for verification.");
@@ -408,14 +466,7 @@ public class DonationController {
 
         // Step D: State Validation
         if (food.getStatus() == FoodStatus.COMPLETED) {
-            Double responseLat = food.getLocation() != null ? food.getLocation().getY() : null;
-            Double responseLon = food.getLocation() != null ? food.getLocation().getX() : null;
-
-            FoodResponse response = new FoodResponse(
-                    food.getId(), food.getDescription(), food.getQuantity(),
-                    food.getStatus().name(), food.getDonor().getOrganizationName(), responseLat, responseLon);
-
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(toFoodResponse(food));
         }
 
         if (food.getStatus() != FoodStatus.CLAIMED) {
@@ -457,6 +508,8 @@ public class DonationController {
     // 7. Endpoint for a Donor to Update a food listing (Fix typos, change quantity)
     @PutMapping("/{id}")
     public ResponseEntity<?> updateListing(@PathVariable UUID id, @RequestBody CreateFoodRequest request) {
+        purgeExpiredListings();
+
         // Step A: Find the logged-in user
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
@@ -479,6 +532,11 @@ public class DonationController {
         food.setDescription(request.getDescription());
         food.setQuantity(request.getQuantity());
 
+        if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(LocalDateTime.now())) {
+            return ResponseEntity.badRequest().body("Expiry time must be in the future.");
+        }
+        food.setExpiresAt(request.getExpiresAt());
+
         if (hasPartialCoordinates(request)) {
             return ResponseEntity.badRequest().body("Please provide both latitude and longitude together.");
         }
@@ -491,16 +549,7 @@ public class DonationController {
         // Step G: Save to database
         FoodListing savedFood = foodRepository.save(food);
 
-        // Step H: Return the updated DTO
-        Double responseLat = savedFood.getLocation() != null ? savedFood.getLocation().getY() : null;
-        Double responseLon = savedFood.getLocation() != null ? savedFood.getLocation().getX() : null;
-
-        FoodResponse response = new FoodResponse(
-                savedFood.getId(), savedFood.getDescription(), savedFood.getQuantity(),
-                savedFood.getStatus().name(), savedFood.getDonor().getOrganizationName(),
-                responseLat, responseLon);
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toFoodResponse(savedFood));
     }
 
     private String generateHandoffPin() {
@@ -541,6 +590,33 @@ public class DonationController {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private void purgeExpiredListings() {
+        foodRepository.deleteNotificationsForExpiredListings();
+        foodRepository.deleteExpiredListingsByStatuses(List.of(FoodStatus.AVAILABLE, FoodStatus.EXPIRED));
+    }
+
+    private boolean isExpired(FoodListing food) {
+        return food.getExpiresAt() != null && !food.getExpiresAt().isAfter(LocalDateTime.now());
+    }
+
+    private FoodResponse toFoodResponse(FoodListing food) {
+        return new FoodResponse(
+                food.getId(),
+                food.getDescription(),
+                food.getQuantity(),
+                food.getStatus().name(),
+                food.getDonor() != null ? food.getDonor().getOrganizationName() : null,
+                food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
+                food.getLocation() != null ? food.getLocation().getY() : null,
+                food.getLocation() != null ? food.getLocation().getX() : null,
+                food.getExpiresAt(),
+                food.getCreatedAt(),
+                food.getClaimedAt(),
+                food.getPickupOutAt(),
+                food.getReceivedAt(),
+                food.getCompletedAt());
     }
 
     private boolean hasBothCoordinates(CreateFoodRequest request) {

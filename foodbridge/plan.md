@@ -170,3 +170,12 @@ Tech to Learn: Spring @ControllerAdvice for global exception handling, React Err
 Day 28: Final Demo Prep
 
 Task: Seed the database with fake bakeries and NGOs, record a demo video, and celebrate.
+
+
+
+
+1. complete transaction have both sender and recever name
+2. need to put the expirey of the food by the sender and start a time out when it over we nned to remove that food
+3. need to store the time for each step
+4. remove the map and we can represent that in phase like( food puslish, claim, pick up out, recieve and completed)
+5. 

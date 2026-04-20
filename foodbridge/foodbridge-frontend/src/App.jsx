@@ -54,16 +54,16 @@ function App() {
   return (
       <Router>
           <AxiosInterceptor>
-            <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
-              {/* We will replace these with real components on Day 6 */}
-              <Routes>
-                <Route path="/" element={<HomeRouter />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-                <Route path="/log-surplus" element={<LogSurplus />} />
-                {/*A catch-all route that sends unknown URLs back to the home page */}
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
+                        <div className="fb-app">
+                            <div className="fb-page-wrap">
+                                <Routes>
+                                    <Route path="/" element={<HomeRouter />} />
+                                    <Route path="/login" element={<Login />} />
+                                    <Route path="/register" element={<Register />} />
+                                    <Route path="/log-surplus" element={<LogSurplus />} />
+                                    <Route path="*" element={<Navigate to="/" />} />
+                                </Routes>
+                            </div>
             </div>
         </AxiosInterceptor>
       </Router>

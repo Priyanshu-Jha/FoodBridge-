@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { connectNgoAlerts } from '../services/ngoAlertsSocket';
-import ClaimedPickupMap from '../components/ClaimedPickupMap';
+import DonationPhaseTimeline from '../components/DonationPhaseTimeline';
 import { getApiErrorMessage } from '../utils/errorMessage';
 
 const NgoDashboard = () => {
     const [availableFood, setAvailableFood] = useState([]);
     const [claimedDonations, setClaimedDonations] = useState([]);
+    const [completedDonations, setCompletedDonations] = useState([]);
     const [alerts, setAlerts] = useState([]);
     const [notificationInbox, setNotificationInbox] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -17,15 +18,20 @@ const NgoDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [inboxError, setInboxError] = useState('');
-    const [claimedPickup, setClaimedPickup] = useState(null);
-    const [ngoLocation, setNgoLocation] = useState(null);
     const [verifyingDonation, setVerifyingDonation] = useState(null);
     const [verificationPayload, setVerificationPayload] = useState('');
     const [verificationPin, setVerificationPin] = useState('');
     const [verificationMessage, setVerificationMessage] = useState('');
+    const [scannerActive, setScannerActive] = useState(false);
+    const [scannerError, setScannerError] = useState('');
     const [verifiedIds, setVerifiedIds] = useState([]);
     const [verifyLoading, setVerifyLoading] = useState(false);
+    const [showPreviousTransactions, setShowPreviousTransactions] = useState(false);
     const [actionMessage, setActionMessage] = useState('');
+    const videoRef = useRef(null);
+    const streamRef = useRef(null);
+    const scanFrameRef = useRef(null);
+    const scannerSupported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
     const navigate = useNavigate();
 
     const fetchAvailableFood = async (token) => {
@@ -42,6 +48,14 @@ const NgoDashboard = () => {
         });
 
         setClaimedDonations(response.data || []);
+    };
+
+    const fetchCompletedDonations = async (token) => {
+        const response = await axios.get('http://localhost:8080/api/donations/completed-by-me', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        setCompletedDonations(response.data || []);
     };
 
     const fetchNotificationInbox = async (token) => {
@@ -104,15 +118,12 @@ const NgoDashboard = () => {
             try {
                 await fetchAvailableFood(token);
                 await fetchClaimedDonations(token);
+                await fetchCompletedDonations(token);
 
                 const me = await axios.get('http://localhost:8080/api/users/me', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setNgoId(me.data.id);
-                setNgoLocation({
-                    latitude: me.data.latitude,
-                    longitude: me.data.longitude,
-                });
 
                 await fetchNotificationInbox(token);
 
@@ -178,7 +189,6 @@ const NgoDashboard = () => {
     // ---> NEW FUNCTION TO HANDLE THE BUTTON CLICK <---
     const handleClaim = async (foodId) => {
         const token = localStorage.getItem('jwt_token');
-        const selectedFood = availableFood.find((food) => food.id === foodId) || null;
         setActionMessage('');
 
         try {
@@ -187,20 +197,9 @@ const NgoDashboard = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            setClaimedPickup(selectedFood);
-            if (selectedFood) {
-                setClaimedDonations((prev) => {
-                    const exists = prev.some((item) => item.id === selectedFood.id);
-                    if (exists) {
-                        return prev;
-                    }
-                    return [{ ...selectedFood, status: 'CLAIMED' }, ...prev];
-                });
-            }
-
-            // Optimistic UI Update: Instantly remove this food from the screen
-            // so no one else accidentally clicks it while the page reloads.
-            setAvailableFood((prevFood) => prevFood.filter(food => food.id !== foodId));
+            await fetchAvailableFood(token);
+            await fetchClaimedDonations(token);
+            await fetchCompletedDonations(token);
 
             setActionMessage('Food successfully claimed. Please arrange pickup with the donor.');
         } catch (err) {
@@ -209,19 +208,137 @@ const NgoDashboard = () => {
         }
     };
 
+    const handleMarkPickupOut = async (foodId) => {
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        setActionMessage('');
+        try {
+            await axios.put(`http://localhost:8080/api/donations/${foodId}/pickup-out`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            await fetchClaimedDonations(token);
+            setActionMessage('Pickup marked as out for delivery.');
+        } catch (err) {
+            console.error(err);
+            setActionMessage(getApiErrorMessage(err, 'Failed to mark pickup-out.'));
+        }
+    };
+
+    const handleMarkReceived = async (foodId) => {
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        setActionMessage('');
+        try {
+            await axios.put(`http://localhost:8080/api/donations/${foodId}/received`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            await fetchClaimedDonations(token);
+            setActionMessage('Pickup marked as received. You can now verify handoff.');
+        } catch (err) {
+            console.error(err);
+            setActionMessage(getApiErrorMessage(err, 'Failed to mark pickup as received.'));
+        }
+    };
+
     const openVerifyModal = (food) => {
         setVerifyingDonation(food);
         setVerificationPayload('');
         setVerificationPin('');
         setVerificationMessage('');
-        setClaimedPickup(food);
+        setScannerError('');
+    };
+
+    const stopQrScanner = () => {
+        if (scanFrameRef.current) {
+            window.cancelAnimationFrame(scanFrameRef.current);
+            scanFrameRef.current = null;
+        }
+
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+        }
+
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+
+        setScannerActive(false);
+    };
+
+    const startQrScanner = async () => {
+        if (!scannerSupported) {
+            setScannerError('Camera QR scan is not supported in this browser. Use PIN or paste payload.');
+            return;
+        }
+
+        try {
+            setScannerError('');
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                },
+            });
+
+            streamRef.current = stream;
+
+            if (!videoRef.current) {
+                setScannerError('Unable to initialize camera preview.');
+                stopQrScanner();
+                return;
+            }
+
+            videoRef.current.srcObject = stream;
+            await videoRef.current.play();
+            setScannerActive(true);
+
+            const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+
+            const scanFrame = async () => {
+                if (!videoRef.current) {
+                    return;
+                }
+
+                try {
+                    const codes = await detector.detect(videoRef.current);
+                    if (codes.length > 0 && codes[0]?.rawValue) {
+                        setVerificationPayload(codes[0].rawValue);
+                        setVerificationMessage('QR scanned successfully. Review payload and verify pickup.');
+                        stopQrScanner();
+                        return;
+                    }
+                } catch {
+                    // Ignore transient scan frame errors while camera stream warms up.
+                }
+
+                scanFrameRef.current = window.requestAnimationFrame(scanFrame);
+            };
+
+            scanFrameRef.current = window.requestAnimationFrame(scanFrame);
+        } catch {
+            stopQrScanner();
+            setScannerError('Camera access failed. Allow camera permission, or use PIN/manual payload.');
+        }
     };
 
     const closeVerifyModal = () => {
+        stopQrScanner();
         setVerifyingDonation(null);
         setVerificationPayload('');
         setVerificationPin('');
         setVerificationMessage('');
+        setScannerError('');
     };
 
     const handleVerifyHandoff = async () => {
@@ -256,11 +373,12 @@ const NgoDashboard = () => {
             setVerificationMessage(`Verified via ${response.data.method}. Donation is now completed.`);
             setVerifiedIds((prev) => prev.includes(verifyingDonation.id) ? prev : [verifyingDonation.id, ...prev]);
             setClaimedDonations((prev) => prev.filter((food) => food.id !== verifyingDonation.id));
-            setClaimedPickup((prev) => (prev?.id === verifyingDonation.id ? null : prev));
 
             const refreshToken = localStorage.getItem('jwt_token');
             if (refreshToken) {
                 await fetchClaimedDonations(refreshToken);
+                await fetchAvailableFood(refreshToken);
+                await fetchCompletedDonations(refreshToken);
             }
             setActionMessage('Handoff verified and donation completed.');
         } catch (err) {
@@ -271,13 +389,41 @@ const NgoDashboard = () => {
         }
     };
 
+    useEffect(() => {
+        return () => {
+            if (scanFrameRef.current) {
+                window.cancelAnimationFrame(scanFrameRef.current);
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+            }
+        };
+    }, []);
+
     if (loading) return <div className="p-8 text-center text-xl">Searching for available food...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
+    const formatDateTime = (value) => {
+        if (!value) {
+            return 'Not set';
+        }
+
+        return new Date(value).toLocaleString();
+    };
+
+    const newFoodRequests = availableFood;
+    const inProgressPickups = claimedDonations;
+    const receivedFoodRecords = [...completedDonations].sort((a, b) => {
+        const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bTime - aTime;
+    });
+    const currentOperationsCount = newFoodRequests.length + inProgressPickups.length;
+
     return (
-        <div className="w-full max-w-6xl mx-auto p-6">
-            <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h1 className="text-3xl font-bold text-gray-800">Available Donations</h1>
+        <div className="fb-shell">
+            <div className="fb-toolbar">
+                <h1 className="fb-title">NGO Pickup Center</h1>
                 <div className="flex items-center gap-3">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                         socketStatus === 'CONNECTED'
@@ -288,6 +434,18 @@ const NgoDashboard = () => {
                     }`}>
                         LIVE: {socketStatus}
                     </span>
+                    <button
+                        onClick={() => setShowPreviousTransactions((prev) => !prev)}
+                        className={`px-4 py-2 font-bold rounded transition ${
+                            showPreviousTransactions
+                                ? 'bg-slate-700 text-white hover:bg-slate-800'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                        {showPreviousTransactions
+                            ? `Current Operations (${currentOperationsCount})`
+                            : `Previous Transactions (${receivedFoodRecords.length})`}
+                    </button>
                     <button
                         onClick={() => setShowInbox((prev) => !prev)}
                         className="px-4 py-2 bg-indigo-100 text-indigo-800 rounded hover:bg-indigo-200 transition flex items-center gap-2"
@@ -312,13 +470,35 @@ const NgoDashboard = () => {
             </div>
 
             {actionMessage && (
-                <p className="mb-4 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                <p className="fb-banner-info mb-4">
                     {actionMessage}
                 </p>
             )}
 
+            {!showPreviousTransactions && (
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="fb-surface p-3">
+                        <p className="text-xs font-semibold text-blue-800">New Food Requests</p>
+                        <p className="text-2xl font-bold text-blue-900">{newFoodRequests.length}</p>
+                    </div>
+                    <div className="fb-surface p-3">
+                        <p className="text-xs font-semibold text-teal-800">In Progress Pickups</p>
+                        <p className="text-2xl font-bold text-teal-900">{inProgressPickups.length}</p>
+                    </div>
+                </div>
+            )}
+
+            {showPreviousTransactions && (
+                <div className="mb-6 grid grid-cols-1 gap-3">
+                    <div className="fb-surface p-3">
+                        <p className="text-xs font-semibold text-emerald-800">Received Food Records</p>
+                        <p className="text-2xl font-bold text-emerald-900">{receivedFoodRecords.length}</p>
+                    </div>
+                </div>
+            )}
+
             {showInbox && (
-                <div className="mb-6 bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
+                <div className="mb-6 fb-surface p-4">
                     <div className="flex items-center justify-between mb-3">
                         <h2 className="text-sm font-bold text-indigo-900">Notification Inbox</h2>
                         <button
@@ -366,18 +546,17 @@ const NgoDashboard = () => {
                 </div>
             )}
 
-            <ClaimedPickupMap pickup={claimedPickup} ngoLocation={ngoLocation} />
-
-            {claimedDonations.length > 0 && (
-                <div className="mb-6 bg-white border border-teal-200 rounded-lg p-4 shadow-sm">
+            {!showPreviousTransactions && inProgressPickups.length > 0 && (
+                <div className="mb-6 fb-surface p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-bold text-teal-900">My Claimed Pickups</h2>
-                        <span className="text-xs text-teal-700">{claimedDonations.length} active</span>
+                        <h2 className="text-sm font-bold text-teal-900">In Progress Pickups</h2>
+                        <span className="text-xs text-teal-700">{inProgressPickups.length} active</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {claimedDonations.map((food) => {
-                            const hasPickupCoordinates = food.latitude != null && food.longitude != null;
+                        {inProgressPickups.map((food) => {
+                            const pickupOutDone = Boolean(food.pickupOutAt);
+                            const receivedDone = Boolean(food.receivedAt);
 
                             return (
                             <div key={food.id} className="border border-teal-100 rounded-lg p-4 bg-teal-50/40">
@@ -386,11 +565,8 @@ const NgoDashboard = () => {
                                         <p className="font-bold text-gray-800">{food.description}</p>
                                         <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
                                         <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
-                                        {!hasPickupCoordinates && (
-                                            <p className="text-xs text-amber-700 mt-1">
-                                                Route unavailable for this pickup because coordinates were not provided.
-                                            </p>
-                                        )}
+                                        <p className="text-sm text-gray-600">Receiver: {food.receiverName || 'Assigned NGO'}</p>
+                                        <p className="text-xs text-gray-500 mt-1">Claimed: {formatDateTime(food.claimedAt)}</p>
                                     </div>
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full ${
                                         verifiedIds.includes(food.id)
@@ -401,17 +577,29 @@ const NgoDashboard = () => {
                                     </span>
                                 </div>
 
-                                <div className="mt-3 flex gap-2">
+                                <div className="mt-3">
+                                    <DonationPhaseTimeline donation={food} />
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-1 gap-2">
                                     <button
-                                        onClick={() => setClaimedPickup(food)}
-                                        disabled={!hasPickupCoordinates}
-                                        className="w-1/2 py-2 bg-slate-100 text-slate-700 text-sm font-semibold rounded hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => handleMarkPickupOut(food.id)}
+                                        disabled={pickupOutDone}
+                                        className="w-full py-2 bg-slate-100 text-slate-700 text-sm font-semibold rounded hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {hasPickupCoordinates ? 'Show Route' : 'No Coordinates'}
+                                        {pickupOutDone ? 'Pickup Out Marked' : 'Mark Pickup Out'}
+                                    </button>
+                                    <button
+                                        onClick={() => handleMarkReceived(food.id)}
+                                        disabled={!pickupOutDone || receivedDone}
+                                        className="w-full py-2 bg-cyan-100 text-cyan-800 text-sm font-semibold rounded hover:bg-cyan-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {receivedDone ? 'Received Marked' : 'Mark Received'}
                                     </button>
                                     <button
                                         onClick={() => openVerifyModal(food)}
-                                        className="w-1/2 py-2 bg-teal-600 text-white text-sm font-semibold rounded hover:bg-teal-700 transition"
+                                        disabled={!pickupOutDone || !receivedDone}
+                                        className="w-full py-2 bg-teal-600 text-white text-sm font-semibold rounded hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Verify Handoff
                                     </button>
@@ -423,7 +611,50 @@ const NgoDashboard = () => {
                 </div>
             )}
 
-            {alerts.length > 0 && (
+            {!showPreviousTransactions && inProgressPickups.length === 0 && (
+                <div className="mb-6 bg-teal-50 text-teal-800 p-5 rounded-lg text-center border border-teal-200">
+                    No in-progress pickups right now.
+                </div>
+            )}
+
+            {showPreviousTransactions && (
+            <div className="mb-6 fb-surface p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-bold text-emerald-900">Previous Transactions</h2>
+                    <span className="text-xs text-emerald-700">{receivedFoodRecords.length} completed</span>
+                </div>
+
+                {receivedFoodRecords.length === 0 ? (
+                    <p className="text-sm text-emerald-800">No completed pickups yet.</p>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {receivedFoodRecords.map((food) => (
+                            <div key={food.id} className="border border-emerald-100 rounded-lg p-4 bg-emerald-50/40">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="font-bold text-gray-800">{food.description}</p>
+                                        <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
+                                        <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
+                                        <p className="text-sm text-gray-600">Receiver: {food.receiverName || 'Assigned NGO'}</p>
+                                    </div>
+                                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                        COMPLETED
+                                    </span>
+                                </div>
+
+                                <div className="mt-3">
+                                    <DonationPhaseTimeline donation={food} compact />
+                                </div>
+
+                                <p className="mt-3 text-xs text-gray-500">Completed: {formatDateTime(food.completedAt)}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            )}
+
+            {!showPreviousTransactions && alerts.length > 0 && (
                 <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
                     <h2 className="text-sm font-bold text-amber-800 mb-2">Live Nearby Alerts</h2>
                     <div className="space-y-2">
@@ -437,15 +668,22 @@ const NgoDashboard = () => {
                 </div>
             )}
 
-            {availableFood.length === 0 ? (
+            {!showPreviousTransactions && (
+            <div className="mb-2">
+                <h2 className="text-lg font-bold text-gray-800">New Food Requests</h2>
+                <p className="text-sm text-gray-500">Claim newly published donations from nearby donors.</p>
+            </div>
+            )}
+
+            {!showPreviousTransactions && (newFoodRequests.length === 0 ? (
                 <div className="bg-blue-50 text-blue-800 p-6 rounded-lg text-center">
                     <p className="text-xl font-semibold">No food is currently available.</p>
                     <p className="mt-2">Check back later when bakeries post new surplus!</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {availableFood.map((food) => (
-                        <div key={food.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
+                    {newFoodRequests.map((food) => (
+                        <div key={food.id} className="fb-surface p-6 flex flex-col justify-between hover:shadow-lg transition">
                             <div>
                                 <div className="flex justify-between items-start mb-2">
                                     <h3 className="text-xl font-bold text-gray-800">{food.description}</h3>
@@ -455,6 +693,10 @@ const NgoDashboard = () => {
                                 </div>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Quantity:</span> {food.quantity}</p>
                                 <p className="text-gray-600 mb-4"><span className="font-semibold">Donor:</span> {food.donorName}</p>
+                                <p className="text-xs text-gray-500 mb-2">
+                                    <span className="font-semibold">Expires:</span> {formatDateTime(food.expiresAt)}
+                                </p>
+                                <DonationPhaseTimeline donation={food} compact />
                             </div>
 
                             {/* We will wire this button up on Day 13! */}
@@ -466,11 +708,11 @@ const NgoDashboard = () => {
                         </div>
                     ))}
                 </div>
-            )}
+            ))}
 
             {verifyingDonation && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+                    <div className="fb-surface w-full max-w-lg p-6">
                         <div className="flex items-start justify-between mb-3">
                             <h3 className="text-xl font-bold text-gray-800">Verify Handoff</h3>
                             <button
@@ -482,10 +724,49 @@ const NgoDashboard = () => {
                         </div>
 
                         <p className="text-sm text-gray-600 mb-4">
-                            Scan the donor QR and paste the payload below, or use the backup PIN.
+                            Open donor "Show Handoff QR", then scan it here using your NGO device camera.
                         </p>
 
                         <div className="space-y-3">
+                            <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                                <p className="text-xs text-slate-700 mb-2">
+                                    If camera scan is available, click Scan QR with Camera. The scanned payload will auto-fill.
+                                </p>
+                                <div className="flex gap-2 mb-2">
+                                    <button
+                                        onClick={startQrScanner}
+                                        disabled={scannerActive || !scannerSupported}
+                                        className="px-3 py-2 bg-slate-700 text-white text-xs font-semibold rounded hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {scannerActive ? 'Scanning...' : 'Scan QR with Camera'}
+                                    </button>
+                                    <button
+                                        onClick={stopQrScanner}
+                                        disabled={!scannerActive}
+                                        className="px-3 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Stop Camera
+                                    </button>
+                                </div>
+                                {!scannerSupported && (
+                                    <p className="text-xs text-amber-700">
+                                        Your browser does not support camera QR detection. Use backup PIN or paste payload manually.
+                                    </p>
+                                )}
+                                {scannerError && (
+                                    <p className="text-xs text-red-600">{scannerError}</p>
+                                )}
+                                {scannerActive && (
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-full mt-2 rounded border border-slate-200"
+                                    />
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Scanned QR Payload</label>
                                 <textarea

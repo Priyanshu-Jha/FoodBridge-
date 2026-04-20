@@ -23,15 +23,13 @@ Expected Result:
 2. Backend starts on port 8080 with no startup error.
 3. Frontend starts on port 5173 and login page is reachable.
 
-### 1.2 Optional Day 23 Routing Setup
+### 1.2 Optional Env Setup
 
 Action:
-1. In foodbridge-frontend, copy .env.example to .env.
-2. Set VITE_MAPBOX_DIRECTIONS_TOKEN.
+1. In foodbridge-frontend, copy .env.example to .env if needed.
 
 Expected Result:
-1. Routing uses Mapbox if token exists.
-2. If token is missing, routing falls back to OSRM.
+1. Frontend can read local environment variables cleanly.
 
 ## 2. Authentication and User Basics (Days 3, 4, 6)
 
@@ -142,7 +140,7 @@ Action:
 
 Expected Result:
 1. Geo-supported flows continue without backend error.
-2. Nearby matching and route sections can use coordinates.
+2. Nearby matching and notification targeting can use coordinates.
 
 ## 5. Realtime Alerts and Notification Fallback (Days 17, 18, 19, 20, 21)
 
@@ -168,27 +166,26 @@ Expected Result:
 1. Unread count decreases correctly.
 2. Read state persists after refresh.
 
-## 6. Map, Route and ETA (Days 22, 23)
+## 6. Pickup Phase Timeline (Days 22, 23)
 
-### 6.1 Claimed Pickup Map
+### 6.1 Timeline Progression
 
 Action:
 1. Claim a listing as NGO.
-2. Use Show Route for claimed pickup.
+2. In My Claimed Pickups, click Mark Pickup Out.
+3. Click Mark Received.
 
 Expected Result:
-1. Map renders pickup marker.
-2. NGO marker appears if NGO location exists.
+1. Timeline updates in order: Published -> Claimed -> Pickup Out -> Received.
+2. Buttons disable when a phase is already completed.
 
-### 6.2 Route and ETA
+### 6.2 Verification Guard
 
 Action:
-1. With coordinates available, open claimed route.
+1. Try Verify Handoff before marking both Pickup Out and Received.
 
 Expected Result:
-1. Polyline route is drawn.
-2. ETA and distance are shown.
-3. If routing provider fails, graceful error appears (no crash).
+1. Backend and UI prevent final verification until both required phases are complete.
 
 ## 7. Secure Handoff and Completion (Days 24, 25, 26)
 
@@ -205,9 +202,10 @@ Expected Result:
 ### 7.2 NGO Verification via PIN
 
 Action:
-1. In NGO claimed pickup card, click Verify Handoff.
-2. Enter 4-digit PIN from donor modal.
-3. Click Verify Pickup.
+1. In NGO claimed pickup card, ensure Pickup Out and Received are both marked.
+2. Click Verify Handoff.
+3. Enter 4-digit PIN from donor modal.
+4. Click Verify Pickup.
 
 Expected Result:
 1. Verification succeeds with success message.
@@ -222,6 +220,17 @@ Action:
 Expected Result:
 1. Verified donation appears as COMPLETED.
 2. It no longer appears in active list.
+3. Completed transaction shows both donor and receiver organization names.
+
+### 7.4 Expiry Timeout
+
+Action:
+1. Donor creates a listing with an expiry time a few minutes in the future.
+2. Wait until the expiry time passes and refresh NGO available page.
+
+Expected Result:
+1. Listing no longer appears in Available for claim.
+2. Listing status transitions to EXPIRED in donor history.
 
 ## 8. Error Handling and Guardrails (Day 27)
 
@@ -267,7 +276,7 @@ Mark each row after testing:
 4. Concurrency Claim Guard: PASS or FAIL
 5. Realtime Alerts: PASS or FAIL
 6. Notification Inbox Read/Read-All: PASS or FAIL
-7. Map + ETA Route: PASS or FAIL
+7. Pickup Phase Timeline: PASS or FAIL
 8. Donor QR + 4-digit PIN: PASS or FAIL
 9. Verify to COMPLETED Transition: PASS or FAIL
 10. Error Handling UX: PASS or FAIL

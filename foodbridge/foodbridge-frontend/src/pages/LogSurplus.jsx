@@ -4,6 +4,14 @@ import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
 
+const toDateTimeLocal = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    return String(value).slice(0, 16);
+};
+
 const LogSurplus = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -18,6 +26,7 @@ const LogSurplus = () => {
             quantity: foodData ? foodData.quantity : '',
             latitude: foodData?.latitude ?? '',
             longitude: foodData?.longitude ?? '',
+            expiresAt: toDateTimeLocal(foodData?.expiresAt),
         }
     });
 
@@ -41,7 +50,7 @@ const LogSurplus = () => {
                     setValue('latitude', String(me.data.latitude));
                     setValue('longitude', String(me.data.longitude));
                 }
-            } catch (error) {
+            } catch {
                 // Ignore location prefill failures and keep form usable.
             }
         };
@@ -70,6 +79,7 @@ const LogSurplus = () => {
             quantity: data.quantity,
             latitude,
             longitude,
+            expiresAt: data.expiresAt || null,
         };
 
         try {
@@ -92,18 +102,18 @@ const LogSurplus = () => {
     };
 
     return (
-        <div className="w-full max-w-md mx-auto mt-10">
+        <div className="fb-shell max-w-3xl">
 
             {/* ---> NEW BACK BUTTON <--- */}
             <button
                 onClick={() => navigate('/')}
-                className="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center transition"
+                className="mb-4 text-indigo-600 hover:text-indigo-800 font-semibold flex items-center transition fb-link"
             >
                 &larr; Back to Dashboard
             </button>
 
             {/* Existing Form Card */}
-            <div className="bg-white p-8 rounded-lg shadow-md">
+            <div className="fb-surface p-8">
                 <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
                     {editMode ? 'Edit Surplus Food' : 'Log Surplus Food'}
                 </h2>
@@ -117,7 +127,7 @@ const LogSurplus = () => {
                         <label className="block text-gray-700 mb-2">Description</label>
                         <input
                             {...register('description', { required: true })}
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 fb-input"
                             placeholder="e.g., 20 loaves of bread"
                         />
                         {errors.description && <span className="text-red-500 text-sm">Required</span>}
@@ -126,7 +136,7 @@ const LogSurplus = () => {
                         <label className="block text-gray-700 mb-2">Quantity</label>
                         <input
                             {...register('quantity', { required: true })}
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 fb-input"
                             placeholder="e.g., 10 kg"
                         />
                         {errors.quantity && <span className="text-red-500 text-sm">Required</span>}
@@ -137,7 +147,7 @@ const LogSurplus = () => {
                             type="number"
                             step="any"
                             {...register('latitude')}
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 fb-input"
                             placeholder="e.g., 18.5204"
                         />
                     </div>
@@ -147,12 +157,20 @@ const LogSurplus = () => {
                             type="number"
                             step="any"
                             {...register('longitude')}
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 fb-input"
                             placeholder="e.g., 73.8567"
                         />
                     </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2">Expiry Date & Time (optional)</label>
+                        <input
+                            type="datetime-local"
+                            {...register('expiresAt')}
+                            className="w-full p-2 fb-input"
+                        />
+                    </div>
                     <p className="text-xs text-gray-500">
-                        If left blank, we will use your saved account location when available.
+                        If location is blank, we use your saved account coordinates. Expired listings are automatically hidden from claims.
                     </p>
                     <button
                         type="submit"

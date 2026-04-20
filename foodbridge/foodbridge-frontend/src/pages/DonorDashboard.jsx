@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
+import DonationPhaseTimeline from '../components/DonationPhaseTimeline';
 import { getApiErrorMessage } from '../utils/errorMessage';
 
 const DonorDashboard = () => {
@@ -15,9 +16,24 @@ const DonorDashboard = () => {
     const navigate = useNavigate();
     const REFRESH_INTERVAL_MS = 5000;
 
-    const activeDonations = donations.filter((food) => food.status !== 'COMPLETED');
-    const completedDonations = donations.filter((food) => food.status === 'COMPLETED');
+    const nonExpiredDonations = donations.filter((food) => food.status !== 'EXPIRED');
+    const activeDonations = nonExpiredDonations.filter((food) => food.status !== 'COMPLETED');
+    const completedDonations = [...nonExpiredDonations]
+        .filter((food) => food.status === 'COMPLETED')
+        .sort((a, b) => {
+            const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+            const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+            return bTime - aTime;
+        });
     const visibleDonations = showPreviousTransactions ? completedDonations : activeDonations;
+
+    const formatDateTime = (value) => {
+        if (!value) {
+            return 'Not set';
+        }
+
+        return new Date(value).toLocaleString();
+    };
 
     const fetchMyDonations = useCallback(async (silent = false) => {
         const token = localStorage.getItem('jwt_token');
@@ -130,9 +146,9 @@ const DonorDashboard = () => {
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
     return (
-        <div className="w-full max-w-6xl mx-auto p-6">
-            <div className="flex justify-between items-center mb-8 border-b pb-4">
-                <h1 className="text-3xl font-bold text-gray-800">My Donations</h1>
+        <div className="fb-shell">
+            <div className="fb-toolbar">
+                <h1 className="fb-title">My Donations</h1>
                 <div className="flex gap-4">
                     <button
                         onClick={() => fetchMyDonations(true)}
@@ -171,7 +187,7 @@ const DonorDashboard = () => {
             </div>
 
             {actionMessage && (
-                <p className="mb-4 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                <p className="fb-banner-info mb-4">
                     {actionMessage}
                 </p>
             )}
@@ -185,7 +201,7 @@ const DonorDashboard = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {visibleDonations.map((food) => (
-                        <div key={food.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-100 flex flex-col justify-between">
+                        <div key={food.id} className="fb-surface p-6 flex flex-col justify-between">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-800 mb-2">{food.description}</h3>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Quantity:</span> {food.quantity}</p>
@@ -193,20 +209,14 @@ const DonorDashboard = () => {
                                     <span className={`ml-2 px-3 py-1 rounded-full text-sm font-bold 
                     ${food.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
                                         food.status === 'CLAIMED' ? 'bg-yellow-100 text-yellow-700' :
+                                            food.status === 'EXPIRED' ? 'bg-amber-100 text-amber-700' :
                                             'bg-gray-100 text-gray-700'}`}>
                                         {food.status}
                                     </span>
                                 </p>
-                                <p className="text-gray-600 mb-2">
-                                    <span className="font-semibold">Route:</span>
-                                    <span className={`ml-2 px-3 py-1 rounded-full text-xs font-bold ${
-                                        food.latitude != null && food.longitude != null
-                                            ? 'bg-emerald-100 text-emerald-700'
-                                            : 'bg-amber-100 text-amber-700'
-                                    }`}>
-                                        {food.latitude != null && food.longitude != null ? 'READY' : 'MISSING COORDINATES'}
-                                    </span>
-                                </p>
+                                <p className="text-gray-600 mb-1"><span className="font-semibold">Receiver:</span> {food.receiverName || 'Not assigned yet'}</p>
+                                <p className="text-gray-600 mb-3"><span className="font-semibold">Expires:</span> {formatDateTime(food.expiresAt)}</p>
+                                <DonationPhaseTimeline donation={food} compact />
                             </div>
                             <div className="flex flex-col mt-4 gap-2">
                                 <p className="text-xs text-gray-400 text-right mb-2">ID: {food.id.substring(0, 8)}...</p>
@@ -250,7 +260,7 @@ const DonorDashboard = () => {
 
             {handoffQrData && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                    <div className="fb-surface w-full max-w-md p-6">
                         <div className="flex items-start justify-between mb-4">
                             <h2 className="text-xl font-bold text-gray-800">Secure Handoff QR</h2>
                             <button

@@ -1,20 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
 
 const Login = () => {
     const [credentials, setCredentials] = useState({ email: '', password: '' });
-    const [error, setError] = useState('');
-    const navigate = useNavigate();
-
-    useEffect(() => {
-        const authMessage = sessionStorage.getItem('auth_message');
+    const [error, setError] = useState(() => {
+        const authMessage = sessionStorage.getItem('auth_message') || '';
         if (authMessage) {
-            setError(authMessage);
             sessionStorage.removeItem('auth_message');
         }
-    }, []);
+        return authMessage;
+    });
+    const navigate = useNavigate();
 
     const handleChange = (e) => {
         setCredentials({ ...credentials, [e.target.name]: e.target.value });
@@ -39,31 +37,40 @@ const Login = () => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">Welcome Back</h2>
+        <div className="fb-auth-layout">
+            <div className="fb-auth-intro">
+                <h1>Move Surplus Food Faster.</h1>
+                <p>
+                    FoodBridge connects donors and NGOs with traceable, secure handoff workflows and live pickup timelines.
+                </p>
+            </div>
 
-            {error && <p className="text-red-500 mb-4">{error}</p>}
+            <div className="fb-auth-card">
+                <h2 className="text-2xl font-bold mb-6 text-gray-800">Welcome Back</h2>
 
-            <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-                <input
-                    type="email" name="email" placeholder="Email Address" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={credentials.email} onChange={handleChange}
-                />
-                <input
-                    type="password" name="password" placeholder="Password" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={credentials.password} onChange={handleChange}
-                />
+                {error && <p className="text-red-600 mb-4 text-sm font-semibold">{error}</p>}
 
-                <button type="submit" className="mt-4 p-3 bg-green-600 text-white rounded font-bold hover:bg-green-700 transition">
-                    Login
-                </button>
-            </form>
+                <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+                    <input
+                        type="email" name="email" placeholder="Email Address" required
+                        className="fb-input p-3"
+                        value={credentials.email} onChange={handleChange}
+                    />
+                    <input
+                        type="password" name="password" placeholder="Password" required
+                        className="fb-input p-3"
+                        value={credentials.password} onChange={handleChange}
+                    />
 
-            <p className="mt-4 text-sm text-gray-600">
-                Don't have an account? <Link to="/register" className="text-blue-600 hover:underline">Register here</Link>
-            </p>
+                    <button type="submit" className="mt-4 p-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition">
+                        Login
+                    </button>
+                </form>
+
+                <p className="mt-4 text-sm text-gray-600">
+                    Don't have an account? <Link to="/register" className="fb-link">Register here</Link>
+                </p>
+            </div>
         </div>
     );
 };

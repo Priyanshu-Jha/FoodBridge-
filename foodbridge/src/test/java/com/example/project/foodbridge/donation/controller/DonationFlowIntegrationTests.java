@@ -86,6 +86,16 @@ class DonationFlowIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
+        mockMvc.perform(put("/api/donations/{id}/pickup-out", listing.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearerToken(ngo))
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/donations/{id}/received", listing.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearerToken(ngo))
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/donations/{id}/handoff-qr", listing.getId())
                 .header(HttpHeaders.AUTHORIZATION, bearerToken(donor)))
                 .andExpect(status().isOk())
@@ -113,6 +123,16 @@ class DonationFlowIntegrationTests {
         JsonNode qrJson = objectMapper.readTree(qrResult.getResponse().getContentAsString());
         String handoffPin = qrJson.get("handoffPin").asText();
 
+        mockMvc.perform(put("/api/donations/{id}/pickup-out", listing.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearerToken(ngo))
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/donations/{id}/received", listing.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearerToken(ngo))
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
         mockMvc.perform(put("/api/donations/{id}/handoff-verify", listing.getId())
                 .header(HttpHeaders.AUTHORIZATION, bearerToken(ngo))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -125,6 +145,10 @@ class DonationFlowIntegrationTests {
         assertThat(updated.getStatus()).isEqualTo(FoodStatus.COMPLETED);
         assertThat(updated.getHandoffPin()).isNull();
         assertThat(updated.getHandoffToken()).isNull();
+        assertThat(updated.getClaimedAt()).isNotNull();
+        assertThat(updated.getPickupOutAt()).isNotNull();
+        assertThat(updated.getReceivedAt()).isNotNull();
+        assertThat(updated.getCompletedAt()).isNotNull();
     }
 
     @Test

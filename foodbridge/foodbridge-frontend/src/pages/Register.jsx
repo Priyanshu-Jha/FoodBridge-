@@ -50,62 +50,70 @@ const Register = () => {
 
     // 4. The UI (Tailwind CSS)
     return (
-        <div className="flex flex-col items-center justify-center w-full max-w-md p-8 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">Create an Account</h2>
+        <div className="fb-auth-layout">
+            <div className="fb-auth-intro">
+                <h1>Start Rescuing Food Today.</h1>
+                <p>
+                    Register as a donor or NGO and access secure handoff verification, live alerts, and structured pickup tracking.
+                </p>
+            </div>
 
-            {/* Show error message if registration fails */}
-            {error && <p className="text-red-500 mb-4">{error}</p>}
+            <div className="fb-auth-card">
+                <h2 className="text-2xl font-bold mb-6 text-gray-800">Create an Account</h2>
 
-            <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-                <input
-                    type="email" name="email" placeholder="Email Address" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.email} onChange={handleChange}
-                />
-                <input
-                    type="password" name="password" placeholder="Password" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.password} onChange={handleChange}
-                />
-                <input
-                    type="text" name="organizationName" placeholder="Organization Name (e.g. Joe's Bakery)" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.organizationName} onChange={handleChange}
-                />
-                <input
-                    type="text" name="contactNumber" placeholder="Phone Number" required
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.contactNumber} onChange={handleChange}
-                />
+                {error && <p className="text-red-600 mb-4 text-sm font-semibold">{error}</p>}
 
-                <select
-                    name="role"
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.role} onChange={handleChange}
-                >
-                    <option value="DONOR">Food Donor (Restaurant/Bakery)</option>
-                    <option value="NGO">NGO / Food Bank</option>
-                </select>
+                <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+                    <input
+                        type="email" name="email" placeholder="Email Address" required
+                        className="fb-input p-3"
+                        value={formData.email} onChange={handleChange}
+                    />
+                    <input
+                        type="password" name="password" placeholder="Password" required
+                        className="fb-input p-3"
+                        value={formData.password} onChange={handleChange}
+                    />
+                    <input
+                        type="text" name="organizationName" placeholder="Organization Name (e.g. Joe's Bakery)" required
+                        className="fb-input p-3"
+                        value={formData.organizationName} onChange={handleChange}
+                    />
+                    <input
+                        type="text" name="contactNumber" placeholder="Phone Number" required
+                        className="fb-input p-3"
+                        value={formData.contactNumber} onChange={handleChange}
+                    />
 
-                <input
-                    type="number" step="any" name="latitude" placeholder="Latitude (optional, e.g. 18.5204)"
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.latitude} onChange={handleChange}
-                />
-                <input
-                    type="number" step="any" name="longitude" placeholder="Longitude (optional, e.g. 73.8567)"
-                    className="p-3 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={formData.longitude} onChange={handleChange}
-                />
+                    <select
+                        name="role"
+                        className="fb-select p-3"
+                        value={formData.role} onChange={handleChange}
+                    >
+                        <option value="DONOR">Food Donor (Restaurant/Bakery)</option>
+                        <option value="NGO">NGO / Food Bank</option>
+                    </select>
 
-                <button type="submit" className="mt-4 p-3 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">
-                    Register
-                </button>
-            </form>
+                    <input
+                        type="number" step="any" name="latitude" placeholder="Latitude (optional, e.g. 18.5204)"
+                        className="fb-input p-3"
+                        value={formData.latitude} onChange={handleChange}
+                    />
+                    <input
+                        type="number" step="any" name="longitude" placeholder="Longitude (optional, e.g. 73.8567)"
+                        className="fb-input p-3"
+                        value={formData.longitude} onChange={handleChange}
+                    />
 
-            <p className="mt-4 text-sm text-gray-600">
-                Already have an account? <Link to="/login" className="text-blue-600 hover:underline">Back to Login</Link>
-            </p>
+                    <button type="submit" className="mt-4 p-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">
+                        Register
+                    </button>
+                </form>
+
+                <p className="mt-4 text-sm text-gray-600">
+                    Already have an account? <Link to="/login" className="fb-link">Back to Login</Link>
+                </p>
+            </div>
         </div>
     );
 };

@@ -1,1 +1,225 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
+
+:root {
+	--fb-ink: #172437;
+	--fb-muted: #5f7186;
+	--fb-line: #d3e1ea;
+	--fb-bg-soft: #f4f8fb;
+	--fb-primary: #0b6ba8;
+	--fb-primary-strong: #094f7a;
+	--fb-success: #0f9f66;
+	--fb-danger: #dd3f4f;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	font-family: 'Manrope', 'Segoe UI', sans-serif;
+	color: var(--fb-ink);
+	background:
+		radial-gradient(circle at 10% 0%, #d9eef8 0%, transparent 38%),
+		radial-gradient(circle at 95% 20%, #dff7eb 0%, transparent 28%),
+		linear-gradient(160deg, #f3f9fc 0%, #f8fafc 45%, #eef6fb 100%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-family: 'Sora', 'Manrope', sans-serif;
+	letter-spacing: -0.02em;
+}
+
+#root {
+	min-height: 100vh;
+}
+
+.fb-app {
+	position: relative;
+	min-height: 100vh;
+	width: 100%;
+	overflow-x: hidden;
+}
+
+.fb-app::before,
+.fb-app::after {
+	content: '';
+	position: fixed;
+	width: 380px;
+	height: 380px;
+	border-radius: 9999px;
+	z-index: 0;
+	pointer-events: none;
+	filter: blur(54px);
+}
+
+.fb-app::before {
+	top: -120px;
+	right: -60px;
+	background: rgba(13, 132, 201, 0.22);
+}
+
+.fb-app::after {
+	left: -120px;
+	bottom: -140px;
+	background: rgba(12, 168, 109, 0.2);
+}
+
+.fb-page-wrap {
+	position: relative;
+	z-index: 1;
+	min-height: 100vh;
+	width: 100%;
+	padding: 14px;
+}
+
+.fb-shell {
+	width: min(1120px, 100%);
+	margin: 20px auto;
+	padding: 20px;
+	border-radius: 24px;
+	border: 1px solid var(--fb-line);
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.87) 0%, rgba(255, 255, 255, 0.75) 100%);
+	backdrop-filter: blur(8px);
+	box-shadow: 0 20px 48px rgba(17, 55, 78, 0.08);
+	animation: fb-rise 320ms ease-out;
+}
+
+.fb-toolbar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 28px;
+	border-bottom: 1px solid rgba(16, 51, 73, 0.18);
+	padding-bottom: 14px;
+}
+
+.fb-title {
+	margin: 0;
+	font-size: clamp(1.7rem, 3.2vw, 2.2rem);
+	font-weight: 800;
+	color: #11263d;
+}
+
+.fb-subtle {
+	color: var(--fb-muted);
+}
+
+.fb-surface {
+	border: 1px solid #d5e3eb;
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.9);
+	box-shadow: 0 10px 24px rgba(16, 51, 73, 0.06);
+}
+
+.fb-banner-info {
+	border-radius: 12px;
+	border: 1px solid #bdd8e8;
+	background: linear-gradient(90deg, #eef7fd 0%, #f7fcff 100%);
+	color: #0f3f5f;
+	padding: 10px 14px;
+	font-size: 0.92rem;
+	font-weight: 600;
+}
+
+.fb-auth-layout {
+	width: min(1020px, 100%);
+	margin: 28px auto;
+	display: grid;
+	grid-template-columns: 1.15fr 1fr;
+	gap: 20px;
+}
+
+.fb-auth-intro {
+	border-radius: 22px;
+	border: 1px solid #c7dbe7;
+	background:
+		linear-gradient(160deg, rgba(13, 107, 168, 0.1), rgba(15, 159, 102, 0.08)),
+		rgba(255, 255, 255, 0.86);
+	padding: 30px;
+	box-shadow: 0 14px 30px rgba(17, 55, 78, 0.08);
+}
+
+.fb-auth-intro h1 {
+	margin: 0 0 12px;
+	font-size: clamp(1.8rem, 4vw, 2.5rem);
+	line-height: 1.1;
+}
+
+.fb-auth-intro p {
+	margin: 0;
+	color: var(--fb-muted);
+	font-size: 1rem;
+}
+
+.fb-auth-card {
+	border-radius: 22px;
+	border: 1px solid #d0dfe8;
+	background: rgba(255, 255, 255, 0.92);
+	box-shadow: 0 16px 38px rgba(17, 55, 78, 0.12);
+	padding: 28px;
+}
+
+.fb-input,
+.fb-select,
+.fb-textarea {
+	border: 1px solid #c8d9e4;
+	border-radius: 12px;
+	transition: border-color 160ms ease, box-shadow 160ms ease;
+	background: #fdfefe;
+}
+
+.fb-input:focus,
+.fb-select:focus,
+.fb-textarea:focus {
+	outline: none;
+	border-color: #2b87c2;
+	box-shadow: 0 0 0 4px rgba(43, 135, 194, 0.16);
+}
+
+.fb-link {
+	color: var(--fb-primary);
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.fb-link:hover {
+	text-decoration: underline;
+}
+
+@keyframes fb-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (max-width: 960px) {
+	.fb-auth-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.fb-shell {
+		margin: 10px auto;
+		border-radius: 18px;
+		padding: 16px;
+	}
+
+	.fb-toolbar {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+}

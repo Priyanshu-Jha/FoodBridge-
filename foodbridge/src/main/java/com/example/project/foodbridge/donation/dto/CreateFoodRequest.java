@@ -1,12 +1,13 @@
 package com.example.project.foodbridge.donation.dto;
 
-import com.example.project.foodbridge.donation.model.FoodStatus;
+import java.time.LocalDateTime;
 
 public class CreateFoodRequest {
     private String description;
     private String quantity;
     private Double latitude;
     private Double longitude;
+    private LocalDateTime expiresAt;
 
     public String getDescription() {
         return description;
@@ -38,6 +39,14 @@ public class CreateFoodRequest {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
     }
 
 }
