@@ -46,3 +46,7 @@ Optional Day 23 routing key setup (frontend):
 2. Kill stale process if required:
 	- `taskkill /F /PID <pid>`
 
+
+Admin Credential:
+Email: demo.admin@foodbridge.local
+Password: Demo@123
