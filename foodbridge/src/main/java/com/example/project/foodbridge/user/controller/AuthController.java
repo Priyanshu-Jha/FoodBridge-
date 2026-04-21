@@ -4,6 +4,7 @@ import com.example.project.foodbridge.security.JwtService;
 import com.example.project.foodbridge.user.dto.AuthResponse;
 import com.example.project.foodbridge.user.dto.LoginRequest;
 import com.example.project.foodbridge.user.dto.RegisterRequest;
+import com.example.project.foodbridge.user.model.Role;
 import com.example.project.foodbridge.user.model.User;
 import com.example.project.foodbridge.user.repository.UserRepository;
 import org.locationtech.jts.geom.Coordinate;
@@ -41,6 +42,10 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) throws Exception {
 
+        if (request.getRole() != Role.DONOR && request.getRole() != Role.NGO) {
+            return ResponseEntity.badRequest().body("Self-registration supports DONOR or NGO roles only.");
+        }
+
         // creayte a nre user entity
         User user = new User();
         user.setEmail(request.getEmail());
@@ -49,6 +54,7 @@ public class AuthController {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setOrganizationName(request.getOrganizationName());
         user.setContactNumber(request.getContactNumber());
+        user.setOrganizationAddress(trimToNull(request.getOrganizationAddress()));
         user.setRole(request.getRole());
 
         if ((request.getLatitude() == null) != (request.getLongitude() == null)) {
@@ -74,6 +80,15 @@ public class AuthController {
 
         // return the token
         return ResponseEntity.ok(new AuthResponse(jwtToken, user.getRole().name()));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @PostMapping("/login")

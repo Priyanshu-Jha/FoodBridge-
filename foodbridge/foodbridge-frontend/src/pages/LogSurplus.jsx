@@ -20,19 +20,19 @@ const LogSurplus = () => {
     const editMode = location.state?.editMode || false;
     const foodData = location.state?.foodData || null;
     const [serverError, setServerError] = useState('');
+    const [imageData, setImageData] = useState(foodData?.imageData || '');
 
     const { register, handleSubmit, setValue, formState: { errors } } = useForm({
         defaultValues: {
             description: foodData ? foodData.description : '',
             quantity: foodData ? foodData.quantity : '',
-            latitude: foodData?.latitude ?? '',
-            longitude: foodData?.longitude ?? '',
+            pickupAddress: foodData?.pickupAddress ?? '',
             expiresAt: toDateTimeLocal(foodData?.expiresAt),
         }
     });
 
     useEffect(() => {
-        const prefillFromMyLocation = async () => {
+        const prefillFromMyProfile = async () => {
             if (editMode) {
                 return;
             }
@@ -47,17 +47,39 @@ const LogSurplus = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
-                if (me.data?.latitude != null && me.data?.longitude != null) {
-                    setValue('latitude', String(me.data.latitude));
-                    setValue('longitude', String(me.data.longitude));
+                if (me.data?.organizationAddress) {
+                    setValue('pickupAddress', String(me.data.organizationAddress));
                 }
             } catch {
-                // Ignore location prefill failures and keep form usable.
+                // Ignore prefill failures and keep form usable.
             }
         };
 
-        prefillFromMyLocation();
+        prefillFromMyProfile();
     }, [editMode, setValue]);
+
+    const handleImageChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            setServerError('Please upload a valid image file.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+            setImageData(result);
+            setServerError('');
+        };
+        reader.onerror = () => {
+            setServerError('Could not read the selected image. Please try another file.');
+        };
+        reader.readAsDataURL(file);
+    };
 
     const onSubmit = async (data) => {
         setServerError('');
@@ -67,19 +89,11 @@ const LogSurplus = () => {
             return;
         }
 
-        const latitude = data.latitude === '' ? null : Number(data.latitude);
-        const longitude = data.longitude === '' ? null : Number(data.longitude);
-
-        if ((latitude === null) !== (longitude === null)) {
-            setServerError('Please provide both latitude and longitude, or leave both empty.');
-            return;
-        }
-
         const payload = {
             description: data.description,
             quantity: data.quantity,
-            latitude,
-            longitude,
+            pickupAddress: data.pickupAddress,
+            imageData,
             expiresAt: data.expiresAt || null,
         };
 
@@ -143,24 +157,29 @@ const LogSurplus = () => {
                         {errors.quantity && <span className="text-red-500 text-sm">Required</span>}
                     </div>
                     <div>
-                        <label className="block text-gray-700 mb-2">Pickup Latitude (optional)</label>
+                        <label className="block text-gray-700 mb-2">Pickup Address</label>
                         <input
-                            type="number"
-                            step="any"
-                            {...register('latitude')}
+                            {...register('pickupAddress', { required: true })}
                             className="w-full p-2 fb-input"
-                            placeholder="e.g., 18.5204"
+                            placeholder="e.g., 12 Main Road, Pune"
                         />
+                        {errors.pickupAddress && <span className="text-red-500 text-sm">Required</span>}
                     </div>
                     <div>
-                        <label className="block text-gray-700 mb-2">Pickup Longitude (optional)</label>
-                        <input
-                            type="number"
-                            step="any"
-                            {...register('longitude')}
-                            className="w-full p-2 fb-input"
-                            placeholder="e.g., 73.8567"
-                        />
+                        <label className="block text-gray-700 mb-2">Food Image (optional)</label>
+                        <input type="file" accept="image/*" onChange={handleImageChange} className="w-full p-2 fb-input" />
+                        {imageData && (
+                            <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-2">
+                                <img src={imageData} alt="Food preview" className="max-h-52 rounded" />
+                                <button
+                                    type="button"
+                                    onClick={() => setImageData('')}
+                                    className="mt-2 text-xs font-semibold text-red-700 hover:text-red-900"
+                                >
+                                    Remove Image
+                                </button>
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-gray-700 mb-2">Expiry Date & Time (optional)</label>
@@ -171,7 +190,7 @@ const LogSurplus = () => {
                         />
                     </div>
                     <p className="text-xs text-gray-500">
-                        If location is blank, we use your saved account coordinates. Expired listings are automatically hidden from claims.
+                        Expired listings are automatically hidden from claims.
                     </p>
                     <button
                         type="submit"

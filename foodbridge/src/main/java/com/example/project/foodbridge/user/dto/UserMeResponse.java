@@ -6,15 +6,20 @@ public class UserMeResponse {
     private UUID id;
     private String email;
     private String organizationName;
+    private String contactNumber;
+    private String organizationAddress;
     private String role;
     private Double latitude;
     private Double longitude;
 
-    public UserMeResponse(UUID id, String email, String organizationName, String role, Double latitude,
+    public UserMeResponse(UUID id, String email, String organizationName, String contactNumber,
+            String organizationAddress, String role, Double latitude,
             Double longitude) {
         this.id = id;
         this.email = email;
         this.organizationName = organizationName;
+        this.contactNumber = contactNumber;
+        this.organizationAddress = organizationAddress;
         this.role = role;
         this.latitude = latitude;
         this.longitude = longitude;
@@ -30,6 +35,14 @@ public class UserMeResponse {
 
     public String getOrganizationName() {
         return organizationName;
+    }
+
+    public String getContactNumber() {
+        return contactNumber;
+    }
+
+    public String getOrganizationAddress() {
+        return organizationAddress;
     }
 
     public String getRole() {

@@ -23,6 +23,9 @@ public class FoodListing {
     @Column(nullable = false)
     private String quantity;
 
+    @Column(length = 300)
+    private String pickupAddress;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FoodStatus status = FoodStatus.AVAILABLE;
@@ -48,6 +51,9 @@ public class FoodListing {
 
     @Column(length = 64)
     private String handoffToken;
+
+    @Column(columnDefinition = "TEXT")
+    private String imageData;
 
     private LocalDateTime expiresAt;
 
@@ -95,6 +101,14 @@ public class FoodListing {
         this.quantity = quantity;
     }
 
+    public String getPickupAddress() {
+        return pickupAddress;
+    }
+
+    public void setPickupAddress(String pickupAddress) {
+        this.pickupAddress = pickupAddress;
+    }
+
     public FoodStatus getStatus() {
         return status;
     }
@@ -133,6 +147,14 @@ public class FoodListing {
 
     public void setHandoffToken(String handoffToken) {
         this.handoffToken = handoffToken;
+    }
+
+    public String getImageData() {
+        return imageData;
+    }
+
+    public void setImageData(String imageData) {
+        this.imageData = imageData;
     }
 
     public Long getVersion() {

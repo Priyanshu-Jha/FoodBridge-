@@ -204,8 +204,17 @@ const DonorDashboard = () => {
                     {visibleDonations.map((food) => (
                         <div key={food.id} className="fb-surface p-6 flex flex-col justify-between">
                             <div>
+                                {food.imageData && (
+                                    <img
+                                        src={food.imageData}
+                                        alt={food.description}
+                                        className="mb-3 h-36 w-full rounded-lg object-cover"
+                                    />
+                                )}
                                 <h3 className="text-xl font-bold text-gray-800 mb-2">{food.description}</h3>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Quantity:</span> {food.quantity}</p>
+                                <p className="text-gray-600 mb-1"><span className="font-semibold">Pickup Address:</span> {food.pickupAddress || 'Not provided'}</p>
+                                <p className="text-gray-600 mb-1"><span className="font-semibold">Your Contact:</span> {food.donorContactNumber || 'Not shared'}</p>
                                 <p className="text-gray-600 mb-4"><span className="font-semibold">Status:</span>
                                     <span className={`ml-2 px-3 py-1 rounded-full text-sm font-bold 
                     ${food.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
@@ -216,6 +225,7 @@ const DonorDashboard = () => {
                                     </span>
                                 </p>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Receiver:</span> {food.receiverName || 'Not assigned yet'}</p>
+                                <p className="text-gray-600 mb-1"><span className="font-semibold">Receiver Phone:</span> {food.receiverContactNumber || 'Not assigned yet'}</p>
                                 <p className="text-gray-600 mb-3"><span className="font-semibold">Expires:</span> {formatDateTime(food.expiresAt)}</p>
                                 <DonationPhaseTimeline donation={food} compact />
                             </div>

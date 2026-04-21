@@ -41,6 +41,8 @@ public class UserController {
                 user.getId(),
                 user.getEmail(),
                 user.getOrganizationName(),
+                user.getContactNumber(),
+                user.getOrganizationAddress(),
                 user.getRole().name(),
                 latitude,
                 longitude);

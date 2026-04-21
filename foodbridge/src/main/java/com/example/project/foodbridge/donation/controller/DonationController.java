@@ -26,6 +26,8 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,6 +39,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/donations")
 public class DonationController {
+    private static final Logger log = LoggerFactory.getLogger(DonationController.class);
+
     private final FoodListingRepository foodRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -68,6 +72,8 @@ public class DonationController {
         FoodListing food = new FoodListing();
         food.setDescription(request.getDescription());
         food.setQuantity(request.getQuantity());
+        food.setPickupAddress(resolvePickupAddress(request.getPickupAddress(), donor.getOrganizationAddress()));
+        food.setImageData(normalizeImageData(request.getImageData()));
         food.setDonor(donor);
 
         if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(LocalDateTime.now())) {
@@ -121,9 +127,7 @@ public class DonationController {
         }
 
         // Step B: Convert the List of Entities into a List of clean DTOs
-        List<FoodResponse> responseList = availableFood.stream()
-                .map(this::toFoodResponse)
-                .collect(Collectors.toList());
+        List<FoodResponse> responseList = toFoodResponsesSafely(availableFood);
 
         return ResponseEntity.ok(responseList);
     }
@@ -140,9 +144,7 @@ public class DonationController {
         List<FoodListing> myFood = foodRepository.findByDonor_Email(currentUserEmail);
 
         // Convert to DTOs
-        List<FoodResponse> responseList = myFood.stream()
-                .map(this::toFoodResponse)
-                .collect(Collectors.toList());
+        List<FoodResponse> responseList = toFoodResponsesSafely(myFood);
 
         return ResponseEntity.ok(responseList);
     }
@@ -162,9 +164,7 @@ public class DonationController {
 
         List<FoodListing> claimedFood = foodRepository.findByClaimedBy_EmailAndStatus(currentUserEmail,
                 FoodStatus.CLAIMED);
-        List<FoodResponse> responseList = claimedFood.stream()
-                .map(this::toFoodResponse)
-                .collect(Collectors.toList());
+        List<FoodResponse> responseList = toFoodResponsesSafely(claimedFood);
 
         return ResponseEntity.ok(responseList);
     }
@@ -184,9 +184,7 @@ public class DonationController {
         List<FoodListing> completedFood = foodRepository.findByClaimedBy_EmailAndStatus(currentUserEmail,
                 FoodStatus.COMPLETED);
 
-        List<FoodResponse> responseList = completedFood.stream()
-                .map(this::toFoodResponse)
-                .collect(Collectors.toList());
+        List<FoodResponse> responseList = toFoodResponsesSafely(completedFood);
 
         return ResponseEntity.ok(responseList);
     }
@@ -531,6 +529,9 @@ public class DonationController {
         // Step E: Update the basic fields
         food.setDescription(request.getDescription());
         food.setQuantity(request.getQuantity());
+        food.setPickupAddress(
+                resolvePickupAddress(request.getPickupAddress(), food.getDonor().getOrganizationAddress()));
+        food.setImageData(normalizeImageData(request.getImageData()));
 
         if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(LocalDateTime.now())) {
             return ResponseEntity.badRequest().body("Expiry time must be in the future.");
@@ -593,8 +594,13 @@ public class DonationController {
     }
 
     private void purgeExpiredListings() {
-        foodRepository.deleteNotificationsForExpiredListings();
-        foodRepository.deleteExpiredListingsByStatuses(List.of(FoodStatus.AVAILABLE, FoodStatus.EXPIRED));
+        try {
+            foodRepository.deleteNotificationsForExpiredListings();
+            foodRepository.deleteExpiredListingsByStatuses(List.of(FoodStatus.AVAILABLE, FoodStatus.EXPIRED));
+        } catch (Exception ex) {
+            // Keep read/write APIs available even if cleanup query hits legacy schema/data.
+            log.warn("Skipping expired-listing purge due to runtime error: {}", ex.getMessage());
+        }
     }
 
     private boolean isExpired(FoodListing food) {
@@ -602,21 +608,81 @@ public class DonationController {
     }
 
     private FoodResponse toFoodResponse(FoodListing food) {
+        Double latitude = null;
+        Double longitude = null;
+        if (food.getLocation() != null && !food.getLocation().isEmpty()) {
+            latitude = food.getLocation().getY();
+            longitude = food.getLocation().getX();
+        }
+
+        String status = food.getStatus() != null ? food.getStatus().name() : FoodStatus.AVAILABLE.name();
+
         return new FoodResponse(
                 food.getId(),
                 food.getDescription(),
                 food.getQuantity(),
-                food.getStatus().name(),
+                food.getPickupAddress(),
+                food.getImageData(),
+                status,
                 food.getDonor() != null ? food.getDonor().getOrganizationName() : null,
+                food.getDonor() != null ? food.getDonor().getContactNumber() : null,
                 food.getClaimedBy() != null ? food.getClaimedBy().getOrganizationName() : null,
-                food.getLocation() != null ? food.getLocation().getY() : null,
-                food.getLocation() != null ? food.getLocation().getX() : null,
+                food.getClaimedBy() != null ? food.getClaimedBy().getContactNumber() : null,
+                latitude,
+                longitude,
                 food.getExpiresAt(),
                 food.getCreatedAt(),
                 food.getClaimedAt(),
                 food.getPickupOutAt(),
                 food.getReceivedAt(),
                 food.getCompletedAt());
+    }
+
+    private List<FoodResponse> toFoodResponsesSafely(List<FoodListing> foods) {
+        return foods.stream()
+                .map(food -> {
+                    try {
+                        return toFoodResponse(food);
+                    } catch (Exception ex) {
+                        log.error("Failed to map donation {} to response. Skipping record.", food.getId(), ex);
+                        return null;
+                    }
+                })
+                .filter(response -> response != null)
+                .collect(Collectors.toList());
+    }
+
+    private String resolvePickupAddress(String requestAddress, String donorAddress) {
+        String normalizedRequestAddress = trimToNull(requestAddress);
+        if (normalizedRequestAddress != null) {
+            return normalizedRequestAddress;
+        }
+
+        return trimToNull(donorAddress);
+    }
+
+    private String normalizeImageData(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+
+        // Prevent very large payloads from breaking request processing.
+        int maxChars = 3_000_000;
+        if (normalized.length() > maxChars) {
+            throw new IllegalArgumentException("Image is too large. Please upload a smaller image.");
+        }
+
+        return normalized;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private boolean hasBothCoordinates(CreateFoodRequest request) {

@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 public class CreateFoodRequest {
     private String description;
     private String quantity;
+    private String pickupAddress;
+    private String imageData;
     private Double latitude;
     private Double longitude;
     private LocalDateTime expiresAt;
@@ -23,6 +25,22 @@ public class CreateFoodRequest {
 
     public void setQuantity(String quantity) {
         this.quantity = quantity;
+    }
+
+    public String getPickupAddress() {
+        return pickupAddress;
+    }
+
+    public void setPickupAddress(String pickupAddress) {
+        this.pickupAddress = pickupAddress;
+    }
+
+    public String getImageData() {
+        return imageData;
+    }
+
+    public void setImageData(String imageData) {
+        this.imageData = imageData;
     }
 
     public Double getLatitude() {

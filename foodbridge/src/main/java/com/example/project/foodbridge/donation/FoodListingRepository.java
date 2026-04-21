@@ -15,6 +15,8 @@ import java.util.UUID;
 public interface FoodListingRepository extends JpaRepository<FoodListing, UUID> {
         List<FoodListing> findByStatus(FoodStatus status);
 
+        long countByStatus(FoodStatus status);
+
         // Add this right below your findByStatus method
         List<FoodListing> findByDonor_Email(String email);
 

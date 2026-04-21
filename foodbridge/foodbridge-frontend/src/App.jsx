@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DonorDashboard from "./pages/DonorDashboard.jsx";
 import LogSurplus from "./pages/LogSurplus.jsx";
 import NgoDashboard from "./pages/NgoDashboard.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 import { getApiErrorMessage } from './utils/errorMessage';
 
 // ---> NEW COMPONENT: The Global Interceptor <---
@@ -44,6 +45,8 @@ const HomeRouter = () => {
         return <NgoDashboard />;
     } else if (role === 'DONOR') {
         return <DonorDashboard />;
+    } else if (role === 'ADMIN') {
+        return <AdminDashboard />;
     } else {
         // If they have no role (not logged in), send them to login
         return <Navigate to="/login" />;

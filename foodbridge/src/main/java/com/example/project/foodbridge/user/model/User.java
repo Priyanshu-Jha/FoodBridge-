@@ -32,6 +32,9 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 15)
     private String contactNumber;
 
+    @Column(length = 300)
+    private String organizationAddress;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
@@ -122,6 +125,14 @@ public class User implements UserDetails {
         this.contactNumber = contactNumber;
     }
 
+    public String getOrganizationAddress() {
+        return organizationAddress;
+    }
+
+    public void setOrganizationAddress(String organizationAddress) {
+        this.organizationAddress = organizationAddress;
+    }
+
     public Role getRole() {
         return role;
     }
@@ -136,6 +147,14 @@ public class User implements UserDetails {
 
     public void setLocation(Point location) {
         this.location = location;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
 }

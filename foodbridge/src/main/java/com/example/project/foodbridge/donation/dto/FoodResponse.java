@@ -7,9 +7,13 @@ public class FoodResponse {
     private UUID id;
     private String description;
     private String quantity;
+    private String pickupAddress;
+    private String imageData;
     private String status;
     private String donorName; // We only send the name, not the whole User object!
+    private String donorContactNumber;
     private String receiverName;
+    private String receiverContactNumber;
     private Double latitude;
     private Double longitude;
     private LocalDateTime expiresAt;
@@ -20,9 +24,12 @@ public class FoodResponse {
     private LocalDateTime completedAt;
 
     // Constructor to quickly map from the Entity
-    public FoodResponse(UUID id, String description, String quantity, String status, String donorName, Double latitude,
+    public FoodResponse(UUID id, String description, String quantity, String pickupAddress, String imageData,
+            String status, String donorName, String donorContactNumber, Double latitude,
             Double longitude) {
-        this(id, description, quantity, status, donorName, null, latitude, longitude,
+        this(id, description, quantity, pickupAddress, imageData, status, donorName, donorContactNumber,
+                null, null,
+                latitude, longitude,
                 null, null, null, null, null, null);
     }
 
@@ -30,9 +37,13 @@ public class FoodResponse {
             UUID id,
             String description,
             String quantity,
+            String pickupAddress,
+            String imageData,
             String status,
             String donorName,
+            String donorContactNumber,
             String receiverName,
+            String receiverContactNumber,
             Double latitude,
             Double longitude,
             LocalDateTime expiresAt,
@@ -44,9 +55,13 @@ public class FoodResponse {
         this.id = id;
         this.description = description;
         this.quantity = quantity;
+        this.pickupAddress = pickupAddress;
+        this.imageData = imageData;
         this.status = status;
         this.donorName = donorName;
+        this.donorContactNumber = donorContactNumber;
         this.receiverName = receiverName;
+        this.receiverContactNumber = receiverContactNumber;
         this.latitude = latitude;
         this.longitude = longitude;
         this.expiresAt = expiresAt;
@@ -70,6 +85,14 @@ public class FoodResponse {
         return quantity;
     }
 
+    public String getPickupAddress() {
+        return pickupAddress;
+    }
+
+    public String getImageData() {
+        return imageData;
+    }
+
     public String getStatus() {
         return status;
     }
@@ -78,8 +101,16 @@ public class FoodResponse {
         return donorName;
     }
 
+    public String getDonorContactNumber() {
+        return donorContactNumber;
+    }
+
     public String getReceiverName() {
         return receiverName;
+    }
+
+    public String getReceiverContactNumber() {
+        return receiverContactNumber;
     }
 
     public Double getLatitude() {

@@ -11,6 +11,7 @@ const Register = () => {
         password: '',
         organizationName: '',
         contactNumber: '',
+        organizationAddress: '',
         role: 'DONOR', // Default value
         latitude: '',
         longitude: ''
@@ -29,8 +30,8 @@ const Register = () => {
         try {
             const payload = {
                 ...formData,
-                latitude: formData.latitude === '' ? null : Number(formData.latitude),
-                longitude: formData.longitude === '' ? null : Number(formData.longitude)
+                latitude: null,
+                longitude: null
             };
 
             // Send the POST request to Spring Boot
@@ -85,6 +86,11 @@ const Register = () => {
                         className="fb-input p-3"
                         value={formData.contactNumber} onChange={handleChange}
                     />
+                    <input
+                        type="text" name="organizationAddress" placeholder="Organization Address" required
+                        className="fb-input p-3"
+                        value={formData.organizationAddress} onChange={handleChange}
+                    />
 
                     <select
                         name="role"
@@ -94,17 +100,6 @@ const Register = () => {
                         <option value="DONOR">Food Donor (Restaurant/Bakery)</option>
                         <option value="NGO">NGO / Food Bank</option>
                     </select>
-
-                    <input
-                        type="number" step="any" name="latitude" placeholder="Latitude (optional, e.g. 18.5204)"
-                        className="fb-input p-3"
-                        value={formData.latitude} onChange={handleChange}
-                    />
-                    <input
-                        type="number" step="any" name="longitude" placeholder="Longitude (optional, e.g. 73.8567)"
-                        className="fb-input p-3"
-                        value={formData.longitude} onChange={handleChange}
-                    />
 
                     <button type="submit" className="mt-4 p-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">
                         Register

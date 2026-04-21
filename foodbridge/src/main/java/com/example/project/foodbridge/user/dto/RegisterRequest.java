@@ -8,6 +8,7 @@ public class RegisterRequest {
     private String password;
     private String organizationName;
     private String contactNumber;
+    private String organizationAddress;
     private Role role;
     private Double latitude;
     private Double longitude;
@@ -43,6 +44,14 @@ public class RegisterRequest {
 
     public void setContactNumber(String contactNumber) {
         this.contactNumber = contactNumber;
+    }
+
+    public String getOrganizationAddress() {
+        return organizationAddress;
+    }
+
+    public void setOrganizationAddress(String organizationAddress) {
+        this.organizationAddress = organizationAddress;
     }
 
     public Role getRole() {

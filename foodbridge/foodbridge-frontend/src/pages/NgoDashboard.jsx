@@ -29,10 +29,9 @@ const NgoDashboard = () => {
     const [verifyLoading, setVerifyLoading] = useState(false);
     const [showPreviousTransactions, setShowPreviousTransactions] = useState(false);
     const [actionMessage, setActionMessage] = useState('');
-    const videoRef = useRef(null);
-    const streamRef = useRef(null);
-    const scanFrameRef = useRef(null);
-    const scannerSupported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+    const scannerRef = useRef(null);
+    const scannerSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+    const scannerElementId = 'foodbridge-handoff-qr-reader';
     const navigate = useNavigate();
 
     const fetchAvailableFood = async (token) => {
@@ -260,21 +259,47 @@ const NgoDashboard = () => {
     };
 
     const stopQrScanner = () => {
-        if (scanFrameRef.current) {
-            window.cancelAnimationFrame(scanFrameRef.current);
-            scanFrameRef.current = null;
+        const scanner = scannerRef.current;
+        if (!scanner) {
+            setScannerActive(false);
+            return;
         }
 
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
-        }
-
-        if (videoRef.current) {
-            videoRef.current.srcObject = null;
-        }
+        scanner.stop()
+            .catch(() => {
+                // Ignore stop errors when scanner is already stopped.
+            })
+            .finally(() => {
+                scanner.clear().catch(() => {
+                    // Ignore clear errors when scanner element is already cleaned up.
+                });
+                scannerRef.current = null;
+                setScannerActive(false);
+            });
 
         setScannerActive(false);
+    };
+
+    const tryStartScanner = async (Html5QrcodeClass, cameraConfig) => {
+        const scanner = new Html5QrcodeClass(scannerElementId);
+        scannerRef.current = scanner;
+
+        await scanner.start(
+            cameraConfig,
+            {
+                fps: 10,
+                qrbox: { width: 240, height: 240 },
+                aspectRatio: 1,
+            },
+            (decodedText) => {
+                setVerificationPayload(decodedText);
+                setVerificationMessage('QR scanned successfully. Review payload and verify pickup.');
+                stopQrScanner();
+            },
+            () => {
+                // Ignore frame-by-frame decode misses; scanner continues automatically.
+            }
+        );
     };
 
     const startQrScanner = async () => {
@@ -284,49 +309,17 @@ const NgoDashboard = () => {
         }
 
         try {
+            stopQrScanner();
             setScannerError('');
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' },
-                },
-            });
-
-            streamRef.current = stream;
-
-            if (!videoRef.current) {
-                setScannerError('Unable to initialize camera preview.');
-                stopQrScanner();
-                return;
-            }
-
-            videoRef.current.srcObject = stream;
-            await videoRef.current.play();
             setScannerActive(true);
 
-            const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+            const { Html5Qrcode } = await import('html5-qrcode');
 
-            const scanFrame = async () => {
-                if (!videoRef.current) {
-                    return;
-                }
-
-                try {
-                    const codes = await detector.detect(videoRef.current);
-                    if (codes.length > 0 && codes[0]?.rawValue) {
-                        setVerificationPayload(codes[0].rawValue);
-                        setVerificationMessage('QR scanned successfully. Review payload and verify pickup.');
-                        stopQrScanner();
-                        return;
-                    }
-                } catch {
-                    // Ignore transient scan frame errors while camera stream warms up.
-                }
-
-                scanFrameRef.current = window.requestAnimationFrame(scanFrame);
-            };
-
-            scanFrameRef.current = window.requestAnimationFrame(scanFrame);
+            try {
+                await tryStartScanner(Html5Qrcode, { facingMode: { exact: 'environment' } });
+            } catch {
+                await tryStartScanner(Html5Qrcode, { facingMode: 'environment' });
+            }
         } catch {
             stopQrScanner();
             setScannerError('Camera access failed. Allow camera permission, or use PIN/manual payload.');
@@ -392,12 +385,7 @@ const NgoDashboard = () => {
 
     useEffect(() => {
         return () => {
-            if (scanFrameRef.current) {
-                window.cancelAnimationFrame(scanFrameRef.current);
-            }
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach((track) => track.stop());
-            }
+            stopQrScanner();
         };
     }, []);
 
@@ -563,10 +551,20 @@ const NgoDashboard = () => {
                             <div key={food.id} className="border border-teal-100 rounded-lg p-4 bg-teal-50/40">
                                 <div className="flex items-start justify-between gap-2">
                                     <div>
+                                        {food.imageData && (
+                                            <img
+                                                src={food.imageData}
+                                                alt={food.description}
+                                                className="mb-2 h-28 w-full max-w-xs rounded object-cover"
+                                            />
+                                        )}
                                         <p className="font-bold text-gray-800">{food.description}</p>
                                         <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
                                         <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
+                                        <p className="text-sm text-gray-600">Donor Phone: {food.donorContactNumber || 'Not shared'}</p>
                                         <p className="text-sm text-gray-600">Receiver: {food.receiverName || 'Assigned NGO'}</p>
+                                        <p className="text-sm text-gray-600">Receiver Phone: {food.receiverContactNumber || 'Not shared'}</p>
+                                        <p className="text-sm text-gray-600">Pickup Address: {food.pickupAddress || 'Not provided'}</p>
                                         <p className="text-xs text-gray-500 mt-1">Claimed: {formatDateTime(food.claimedAt)}</p>
                                     </div>
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full ${
@@ -633,10 +631,20 @@ const NgoDashboard = () => {
                             <div key={food.id} className="border border-emerald-100 rounded-lg p-4 bg-emerald-50/40">
                                 <div className="flex items-start justify-between gap-2">
                                     <div>
+                                        {food.imageData && (
+                                            <img
+                                                src={food.imageData}
+                                                alt={food.description}
+                                                className="mb-2 h-28 w-full max-w-xs rounded object-cover"
+                                            />
+                                        )}
                                         <p className="font-bold text-gray-800">{food.description}</p>
                                         <p className="text-sm text-gray-600">Quantity: {food.quantity}</p>
                                         <p className="text-sm text-gray-600">Donor: {food.donorName}</p>
+                                        <p className="text-sm text-gray-600">Donor Phone: {food.donorContactNumber || 'Not shared'}</p>
                                         <p className="text-sm text-gray-600">Receiver: {food.receiverName || 'Assigned NGO'}</p>
+                                        <p className="text-sm text-gray-600">Receiver Phone: {food.receiverContactNumber || 'Not shared'}</p>
+                                        <p className="text-sm text-gray-600">Pickup Address: {food.pickupAddress || 'Not provided'}</p>
                                     </div>
                                     <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
                                         COMPLETED
@@ -686,6 +694,13 @@ const NgoDashboard = () => {
                     {newFoodRequests.map((food) => (
                         <div key={food.id} className="fb-surface p-6 flex flex-col justify-between hover:shadow-lg transition">
                             <div>
+                                {food.imageData && (
+                                    <img
+                                        src={food.imageData}
+                                        alt={food.description}
+                                        className="mb-3 h-36 w-full rounded-lg object-cover"
+                                    />
+                                )}
                                 <div className="flex justify-between items-start mb-2">
                                     <h3 className="text-xl font-bold text-gray-800">{food.description}</h3>
                                     <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">
@@ -694,6 +709,8 @@ const NgoDashboard = () => {
                                 </div>
                                 <p className="text-gray-600 mb-1"><span className="font-semibold">Quantity:</span> {food.quantity}</p>
                                 <p className="text-gray-600 mb-4"><span className="font-semibold">Donor:</span> {food.donorName}</p>
+                                <p className="text-gray-600 mb-1"><span className="font-semibold">Donor Phone:</span> {food.donorContactNumber || 'Not shared'}</p>
+                                <p className="text-gray-600 mb-2"><span className="font-semibold">Pickup Address:</span> {food.pickupAddress || 'Not provided'}</p>
                                 <p className="text-xs text-gray-500 mb-2">
                                     <span className="font-semibold">Expires:</span> {formatDateTime(food.expiresAt)}
                                 </p>
@@ -758,13 +775,7 @@ const NgoDashboard = () => {
                                     <p className="text-xs text-red-600">{scannerError}</p>
                                 )}
                                 {scannerActive && (
-                                    <video
-                                        ref={videoRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full mt-2 rounded border border-slate-200"
-                                    />
+                                    <div id={scannerElementId} className="w-full mt-2 rounded border border-slate-200 overflow-hidden" />
                                 )}
                             </div>
 
