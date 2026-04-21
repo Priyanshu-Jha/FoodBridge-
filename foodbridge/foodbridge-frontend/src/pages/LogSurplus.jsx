@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { apiUrl } from '../config/api';
 
 const toDateTimeLocal = (value) => {
     if (!value) {
@@ -42,7 +43,7 @@ const LogSurplus = () => {
             }
 
             try {
-                const me = await axios.get('http://localhost:8080/api/users/me', {
+                const me = await axios.get(apiUrl('/api/users/me'), {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
@@ -84,11 +85,11 @@ const LogSurplus = () => {
 
         try {
             if (editMode) {
-                await axios.put(`http://localhost:8080/api/donations/${foodData.id}`, payload, {
+                await axios.put(apiUrl(`/api/donations/${foodData.id}`), payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             } else {
-                await axios.post('http://localhost:8080/api/donations', payload, {
+                await axios.post(apiUrl('/api/donations'), payload, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             }

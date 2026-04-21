@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { apiUrl } from '../config/api';
 
 const Login = () => {
     const [credentials, setCredentials] = useState({ email: '', password: '' });
@@ -22,7 +23,7 @@ const Login = () => {
         e.preventDefault();
         try {
             // Send the login request to the new endpoint
-            const response = await axios.post('http://localhost:8080/api/auth/login', credentials);
+            const response = await axios.post(apiUrl('/api/auth/login'), credentials);
 
             // Save the fresh token
             localStorage.setItem('jwt_token', response.data.token);

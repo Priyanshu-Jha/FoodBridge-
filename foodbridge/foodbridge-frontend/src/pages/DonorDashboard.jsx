@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import DonationPhaseTimeline from '../components/DonationPhaseTimeline';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { apiUrl } from '../config/api';
 
 const DonorDashboard = () => {
     const [donations, setDonations] = useState([]);
@@ -44,7 +45,7 @@ const DonorDashboard = () => {
         }
 
         try {
-            const response = await axios.get('http://localhost:8080/api/donations/me', {
+            const response = await axios.get(apiUrl('/api/donations/me'), {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -96,7 +97,7 @@ const DonorDashboard = () => {
 
         const token = localStorage.getItem('jwt_token');
         try {
-            await axios.delete(`http://localhost:8080/api/donations/${foodId}`, {
+            await axios.delete(apiUrl(`/api/donations/${foodId}`), {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -122,7 +123,7 @@ const DonorDashboard = () => {
 
         try {
             setHandoffQrLoadingId(food.id);
-            const response = await axios.get(`http://localhost:8080/api/donations/${food.id}/handoff-qr`, {
+            const response = await axios.get(apiUrl(`/api/donations/${food.id}/handoff-qr`), {
                 headers: { Authorization: `Bearer ${token}` }
             });
 

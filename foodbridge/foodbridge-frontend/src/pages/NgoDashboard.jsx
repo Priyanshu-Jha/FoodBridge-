@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { connectNgoAlerts } from '../services/ngoAlertsSocket';
 import DonationPhaseTimeline from '../components/DonationPhaseTimeline';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { apiUrl } from '../config/api';
 
 const NgoDashboard = () => {
     const [availableFood, setAvailableFood] = useState([]);
@@ -35,7 +36,7 @@ const NgoDashboard = () => {
     const navigate = useNavigate();
 
     const fetchAvailableFood = async (token) => {
-        const response = await axios.get('http://localhost:8080/api/donations/available', {
+        const response = await axios.get(apiUrl('/api/donations/available'), {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -43,7 +44,7 @@ const NgoDashboard = () => {
     };
 
     const fetchClaimedDonations = async (token) => {
-        const response = await axios.get('http://localhost:8080/api/donations/claimed-by-me', {
+        const response = await axios.get(apiUrl('/api/donations/claimed-by-me'), {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -51,7 +52,7 @@ const NgoDashboard = () => {
     };
 
     const fetchCompletedDonations = async (token) => {
-        const response = await axios.get('http://localhost:8080/api/donations/completed-by-me', {
+        const response = await axios.get(apiUrl('/api/donations/completed-by-me'), {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -59,7 +60,7 @@ const NgoDashboard = () => {
     };
 
     const fetchNotificationInbox = async (token) => {
-        const response = await axios.get('http://localhost:8080/api/notifications/inbox?limit=20', {
+        const response = await axios.get(apiUrl('/api/notifications/inbox?limit=20'), {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -75,7 +76,7 @@ const NgoDashboard = () => {
         }
 
         try {
-            const response = await axios.put(`http://localhost:8080/api/notifications/${notificationId}/read`, {}, {
+            const response = await axios.put(apiUrl(`/api/notifications/${notificationId}/read`), {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -95,7 +96,7 @@ const NgoDashboard = () => {
         }
 
         try {
-            await axios.put('http://localhost:8080/api/notifications/read-all', {}, {
+            await axios.put(apiUrl('/api/notifications/read-all'), {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -120,7 +121,7 @@ const NgoDashboard = () => {
                 await fetchClaimedDonations(token);
                 await fetchCompletedDonations(token);
 
-                const me = await axios.get('http://localhost:8080/api/users/me', {
+                const me = await axios.get(apiUrl('/api/users/me'), {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setNgoId(me.data.id);
@@ -193,7 +194,7 @@ const NgoDashboard = () => {
 
         try {
             // Send a PUT request to the backend with the specific food ID
-            await axios.put(`http://localhost:8080/api/donations/${foodId}/claim`, {}, {
+            await axios.put(apiUrl(`/api/donations/${foodId}/claim`), {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -217,7 +218,7 @@ const NgoDashboard = () => {
 
         setActionMessage('');
         try {
-            await axios.put(`http://localhost:8080/api/donations/${foodId}/pickup-out`, {}, {
+            await axios.put(apiUrl(`/api/donations/${foodId}/pickup-out`), {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -238,7 +239,7 @@ const NgoDashboard = () => {
 
         setActionMessage('');
         try {
-            await axios.put(`http://localhost:8080/api/donations/${foodId}/received`, {}, {
+            await axios.put(apiUrl(`/api/donations/${foodId}/received`), {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -360,7 +361,7 @@ const NgoDashboard = () => {
         try {
             setVerifyLoading(true);
             const response = await axios.put(
-                `http://localhost:8080/api/donations/${verifyingDonation.id}/handoff-verify`,
+                apiUrl(`/api/donations/${verifyingDonation.id}/handoff-verify`),
                 {
                     qrPayload: verificationPayload.trim() || null,
                     handoffPin: verificationPin.trim() || null,

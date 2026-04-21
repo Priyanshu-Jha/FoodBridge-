@@ -1,7 +1,6 @@
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-
-const WS_BASE_URL = 'http://localhost:8080/ws';
+import { WS_BASE_URL } from '../config/api';
 
 export const connectNgoAlerts = ({ ngoId, onAlert, onConnect, onDisconnect, onError }) => {
     if (!ngoId) {

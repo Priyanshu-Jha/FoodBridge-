@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '../utils/errorMessage';
+import { apiUrl } from '../config/api';
 
 const Register = () => {
     // 1. Setting up React State
@@ -33,7 +34,7 @@ const Register = () => {
             };
 
             // Send the POST request to Spring Boot
-            const response = await axios.post('http://localhost:8080/api/auth/register', payload);
+            const response = await axios.post(apiUrl('/api/auth/register'), payload);
 
             // ---> NEW: Save BOTH the token and the role
             localStorage.setItem('jwt_token', response.data.token);
